@@ -63,6 +63,19 @@ class ServiceGateway:
     async def call(self, method: str, *args: Any, **kwargs: Any) -> Any:
         return await asyncio.to_thread(self.call_sync, method, *args, **kwargs)
 
+    # Leituras somente-leitura de atributos públicos do MLPService que a fachada não devolve
+    # (backend/service.py): rótulos das classes e nomes das colunas (`meta`) e a normalização
+    # ativa (`norm_kind`). Se o atributo não existir, a UI segue com valores padrão.
+    def read_meta(self) -> dict:
+        with self._lock:
+            meta = getattr(self.service, "meta", None)
+            return dict(meta) if isinstance(meta, dict) else {}
+
+    def read_norm_kind(self) -> str | None:
+        with self._lock:
+            kind = getattr(self.service, "norm_kind", None)
+            return kind if kind in ("minmax", "zscore") else None
+
 
 def create_gateway() -> ServiceGateway:
     if os.environ.get("MLP_FRONTEND_DEMO") != "1":

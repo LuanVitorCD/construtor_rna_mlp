@@ -36,6 +36,7 @@ class DataView:
         self.pick_btn = ft.FilledButton("Escolher arquivo CSV…", icon=ft.Icons.UPLOAD_FILE, on_click=self._on_pick)
         self.path_text = ft.Text("Nenhum arquivo selecionado.", color=C.ON_SURFACE_VARIANT, selectable=True)
         self.file_message = Message()
+        self.model_note = Message()
 
         # --- colunas
         self.columns_list = ft.Column(spacing=4, tight=True)
@@ -98,7 +99,8 @@ class DataView:
 
         left = ft.Column(
             [
-                section("1. Arquivo", [ft.Row([self.pick_btn], wrap=True), self.path_text, self.file_message.root],
+                section("1. Arquivo", [ft.Row([self.pick_btn], wrap=True), self.path_text, self.file_message.root,
+                                       self.model_note.root],
                         icon=ft.Icons.FOLDER_OPEN),
                 self.columns_section,
                 self.preview_section,
@@ -283,6 +285,11 @@ class DataView:
         info = dict(info or {})
         info.setdefault("inputs", ins)
         info.setdefault("outputs", outs)
+        if state.task == "classification" and not info.get("classes"):
+            # O MLPService guarda os rótulos em `meta`, sem devolvê-los em load_dataset.
+            labels = self.ctx.gateway.read_meta().get("class_labels")
+            if labels:
+                info["classes"] = [str(c) for c in labels]
         state.input_cols, state.output_cols = ins, outs
         state.on_dataset_loaded(info)
         self.norm_group.value = "none"
@@ -307,10 +314,8 @@ class DataView:
             out_set = set(info.get("outputs", []))
             data_rows = []
             for row in preview[:8]:
-                if isinstance(row, dict):
-                    values = [row.get(c, "") for c in cols]
-                else:
-                    values = list(row)[: len(cols)]
+                values = preview_row_values(row, info.get("inputs", []), info.get("outputs", []),
+                                            info.get("classes"))
                 data_rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text(_cell(v))) for v in values]))
             table = ft.DataTable(
                 columns=[ft.DataColumn(ft.Text(c + (" (saída)" if c in out_set else ""),
@@ -424,6 +429,15 @@ class DataView:
         self.split_btn.disabled = busy or not state.has_dataset
         self.norm_group.disabled = busy or not state.has_dataset
         self.split_hint.visible = not state.has_dataset
+        if state.model_origin == "loaded" and state.loaded_normalization:
+            kind = NORMALIZATION_SHORT[state.loaded_normalization]
+            self.model_note.show(
+                "warning", f"O modelo aberto foi treinado com normalização {kind}",
+                "Ao carregar um dataset, o backend descarta a normalização salva e a recalcula a partir "
+                f"do novo subconjunto de treinamento (isso vale também para as previsões). Escolha {kind} "
+                "no passo 4 para avaliar o modelo em condições equivalentes.")
+        else:
+            self.model_note.clear()
         if state.columns and self.columns_section.visible:
             self._update_compat()
         if not state.has_dataset:
@@ -438,6 +452,27 @@ class DataView:
                 self.split_message.clear()
                 self.norm_message.clear()
                 self.norm_group.value = "none"
+
+
+def preview_row_values(row, inputs: list[str], outputs: list[str], classes: list[str] | None = None) -> list:
+    """Valores de uma linha da prévia, na ordem entradas + saídas.
+
+    Aceita o formato do MLPService (``{"x": [...], "y": [...]}``, com ``y`` codificado
+    0/1 ou one-hot na classificação), um dict por nome de coluna ou uma lista simples.
+    """
+    n = len(inputs) + len(outputs)
+    if isinstance(row, dict) and "x" in row and "y" in row:
+        x = list(row["x"])
+        y = list(row["y"])
+        if classes and len(outputs) == 1 and len(classes) >= 2:
+            if len(y) == 1 and len(classes) == 2:  # binária: limiar 0,5
+                y = [classes[1] if float(y[0]) >= 0.5 else classes[0]]
+            elif len(y) == len(classes):  # one-hot: maior saída
+                y = [classes[max(range(len(y)), key=lambda i: float(y[i]))]]
+        return (x + y)[:n]
+    if isinstance(row, dict):
+        return [row.get(c, "") for c in [*inputs, *outputs]]
+    return list(row)[:n]
 
 
 def _cell(value) -> str:

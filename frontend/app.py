@@ -194,7 +194,8 @@ class AppShell:
         elif s.trained_epochs:
             parts.append(f"Treinada: {s.trained_epochs} épocas")
         if s.model_origin == "loaded" and s.model_path:
-            parts.append(f"Modelo: {os.path.basename(s.model_path)}")
+            norm = f", normalização {NORMALIZATION_SHORT[s.loaded_normalization]}" if s.loaded_normalization else ""
+            parts.append(f"Modelo: {os.path.basename(s.model_path)}{norm}")
         if self.ctx.gateway.demo:
             parts.append("MODO DEMONSTRAÇÃO")
         return "  ·  ".join(parts)
@@ -306,9 +307,10 @@ class AppShell:
             self.toast("error", f"{err.title}: {err.message}")
             return
         description = dict(description or {})
-        meta = description.get("meta") or {}
-        state.loaded_meta = meta
+        # describe_network() não traz `meta`: nomes das colunas e rótulos vêm do atributo do service.
+        state.loaded_meta = description.get("meta") or self.ctx.gateway.read_meta()
         state.on_model_loaded(description, path)
+        state.loaded_normalization = self.ctx.gateway.read_norm_kind()
         self.views[0].load_from_state()
         state.notify()
         self.toast("success", f"Modelo carregado: {os.path.basename(path)} ({state.architecture_text()}). "

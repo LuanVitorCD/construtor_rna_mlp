@@ -1,15 +1,11 @@
 """Serviço de DEMONSTRAÇÃO com o mesmo contrato de ``backend/service.py``.
 
-Serve só para abrir e testar a interface enquanto o backend não existe.
+Serve só para abrir e testar a interface sem o backend (``MLP_FRONTEND_DEMO=1``).
 **Não é uma rede neural**: as curvas de erro e as previsões são simuladas.
-A validação de entradas, os erros e os formatos de retorno imitam o pré-código
-(``pre_codigo_backend_mlp.md``, seção 15), então a UI se comporta igual com o
-backend real.
-
-Extensão opcional que a UI aproveita, se o backend real também a oferecer:
-``evaluate()`` pode devolver ``y_true`` e ``y_pred`` (listas de listas) e, na
-classificação, ``classes``. Com isso a aba Avaliação mostra o gráfico
-"desejado × estimado" e as métricas R², MAE e erro relativo.
+A validação de entradas, os erros e os **formatos de retorno são os mesmos do
+``backend/service.py`` real** (ex.: ``describe_network`` com ``n_neurons`` e
+``total_parameters``; prévia ``{"x": [...], "y": [...]}``; rótulos das classes só em
+``meta``), então a UI se comporta igual com os dois.
 """
 
 from __future__ import annotations
@@ -60,7 +56,7 @@ class DemoService:
         self.raw_rows: list[dict[str, str]] | None = None
         self.dataset: dict | None = None
         self.split: dict[str, list[int]] | None = None
-        self.normalization: str | None = None
+        self.norm_kind: str | None = None
         self.history: list[dict] = []
         self.classes: list[str] | None = None
 
@@ -93,9 +89,7 @@ class DemoService:
         }
         self.task = task
         self.meta = {}
-        self.split = None
-        self.normalization = None
-        self.history = []
+        self._reset_data()
         self._skill = 0.0
         return self.describe_network()
 
@@ -105,11 +99,11 @@ class DemoService:
         for i, spec in enumerate(net["layers"]):
             params = (fan_in + 1) * spec["neurons"]
             total += params
-            layers.append({"index": i, "neurons": spec["neurons"], "activation": spec["activation"],
-                           "n_params": params})
+            layers.append({"index": i, "n_inputs": fan_in, "n_neurons": spec["neurons"],
+                           "activation": spec["activation"], "parameters": params})
             fan_in = spec["neurons"]
-        return {"n_inputs": net["n_inputs"], "n_outputs": fan_in, "task": self.task,
-                "layers": layers, "n_params": total}
+        return {"task": self.task, "n_inputs": net["n_inputs"], "n_outputs": fan_in,
+                "total_parameters": total, "layers": layers}
 
     # ------------------------------------------------------------------ dados
     def get_csv_columns(self, path: str) -> list[str]:
@@ -170,12 +164,14 @@ class DemoService:
         self.meta = {"input_cols": list(input_cols), "output_cols": list(output_cols),
                      "class_labels": self.classes}
         self.split = None
+        self.norm_kind = None
         self.history = []
-        result = {"rows": len(rows), "inputs": list(input_cols), "outputs": list(output_cols),
-                  "preview": [{c: r[c] for c in [*input_cols, *output_cols]} for r in rows[:8]]}
-        if self.classes is not None:
-            result["classes"] = list(self.classes)
-        return result
+        targets = self._encode([r for r in rows[:5]])
+        # Mesmo formato do MLPService: x/y numéricos; na classificação, y já codificado
+        # e os rótulos das classes ficam só em `meta`.
+        return {"rows": len(rows), "inputs": list(input_cols), "outputs": list(output_cols),
+                "preview": [{"x": [float(r[c]) for c in input_cols], "y": y}
+                            for r, y in zip(rows[:5], targets)]}
 
     def split_dataset(self, train_pct: float, val_pct: float, test_pct: float,
                       seed: int | None = None) -> dict:
@@ -190,16 +186,16 @@ class DemoService:
         if n_tr == 0 or n_va == 0:
             raise DatasetError("Treinamento e validação não podem ficar vazios.")
         self.split = {"train": idx[:n_tr], "val": idx[n_tr:n_tr + n_va], "test": idx[n_tr + n_va:]}
-        self.normalization = None
-        self.history = []
+        self.history = []  # como no MLPService, a normalização atual (norm_kind) é reaplicada
         return {k: len(v) for k, v in self.split.items()}
 
-    def set_normalization(self, kind: str | None) -> None:
+    def set_normalization(self, kind: str | None) -> dict:
         if self.split is None:
             raise StateError("Divida o dataset antes de normalizar.")
         if kind not in (None, "minmax", "zscore"):
             raise ConfigError("Normalização desconhecida: " + str(kind))
-        self.normalization = kind
+        self.norm_kind = kind
+        return {"normalization": kind}
 
     # ------------------------------------------------------------------ treino
     def start_training(self, epochs: int, lr: float, shuffle_seed: int | None = None,
@@ -256,8 +252,12 @@ class DemoService:
 
     # --------------------------------------------------------- avaliação/uso
     def _targets(self, subset: str) -> list[list[float]]:
-        assert self.raw_rows is not None and self.split is not None and self.dataset is not None
-        rows = [self.raw_rows[i] for i in self.split[subset]]
+        assert self.raw_rows is not None and self.split is not None
+        return self._encode([self.raw_rows[i] for i in self.split[subset]])
+
+    def _encode(self, rows: list[dict[str, str]]) -> list[list[float]]:
+        """Saídas esperadas como o MLPService guarda: floats; classes em 0/1 ou one-hot."""
+        assert self.dataset is not None
         outs = self.dataset["outputs"]
         if self.task == "classification":
             assert self.classes is not None
@@ -284,8 +284,8 @@ class DemoService:
         spread = (max(flat) - min(flat)) or 1.0
         y_pred = [[v + rng.gauss(0, 0.35 * noise * spread) for v in row] for row in y_true]
         mse = sum((t - p) ** 2 for tr, pr in zip(y_true, y_pred) for t, p in zip(tr, pr)) / len(flat)
-        result: dict[str, Any] = {"mse": mse, "n_samples": len(y_true),
-                                  "y_true": y_true, "y_pred": y_pred}
+        # Mesmas chaves do MLPService.evaluate (sem y_true/y_pred).
+        result: dict[str, Any] = {"subset": subset, "mse": mse}
         if self.task == "classification":
             assert self.classes is not None
             k = len(self.classes)
@@ -307,8 +307,8 @@ class DemoService:
         base = sum(values) / len(values)
         outputs = [0.5 * base + 0.1 * j for j in range(n_out)]
         result: dict[str, Any] = {"outputs": outputs}
-        if self.task == "classification":
-            classes = self.meta.get("class_labels") or [str(i) for i in range(max(2, n_out))]
+        classes = self.meta.get("class_labels")
+        if self.task == "classification" and classes:  # como o backend: rótulo só se houver classes
             if n_out == 1:
                 outputs = [1 / (1 + math.exp(-base))]
                 result["outputs"] = outputs
@@ -328,8 +328,8 @@ class DemoService:
                                         "bias": 0.0} for _ in range(spec["neurons"])]})
             fan_in = spec["neurons"]
         data = {"format_version": 1, "task": self.task, "n_inputs": net["n_inputs"], "layers": layers,
-                "normalization": ({"kind": self.normalization, "params": {}}
-                                  if self.normalization else None),
+                "normalization": ({"kind": self.norm_kind, "params": {}}
+                                  if self.norm_kind else None),
                 "meta": {"input_cols": self.meta.get("input_cols", []),
                          "output_cols": self.meta.get("output_cols", []),
                          "class_labels": self.meta.get("class_labels")}}
@@ -339,7 +339,7 @@ class DemoService:
         except OSError as exc:
             raise PersistenceError(f"Não foi possível salvar: {exc}") from exc
 
-    def load(self, path: str) -> None:
+    def load(self, path: str) -> dict:
         try:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
@@ -356,10 +356,12 @@ class DemoService:
             meta = data.get("meta") or {}
         except (KeyError, TypeError) as exc:
             raise PersistenceError(f"Campo obrigatório ausente: {exc}") from exc
+        normalization = data.get("normalization") or {}
         self.network = {"n_inputs": n_inputs, "layers": layers, "seed": None}
         self.task = task
-        self.meta = meta
-        self.classes = meta.get("class_labels")
+        self.meta = dict(meta)
         self._reset_data()
         self.classes = meta.get("class_labels")
+        self.norm_kind = normalization.get("kind")
         self._skill = 0.8
+        return self.describe_network()

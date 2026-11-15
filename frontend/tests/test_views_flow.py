@@ -1,58 +1,17 @@
 """Fluxo completo pelas telas (sem abrir janela), usando o DemoService.
 
-Os handlers são chamados diretamente, como se o usuário clicasse. Uma página falsa
-substitui ``ft.Page`` (só ``update``/``run_task``/diálogos são usados pelas telas).
+Os handlers são chamados diretamente, como se o usuário clicasse.
 """
 
 import asyncio
 
 import pytest
 
-from frontend.context import AppContext
-from frontend.demo_service import DemoBackendError, DemoService
-from frontend.service_gateway import ServiceGateway
-from frontend.state import AppState
-from frontend.views.architecture import ArchitectureView
-from frontend.views.data import DataView
-from frontend.views.evaluation import EvaluationView
-from frontend.views.prediction import PredictionView
-from frontend.views.training import TrainingView
-
-
-class FakePage:
-    def __init__(self):
-        self.tasks = []
-
-    def update(self, *controls):
-        pass
-
-    def run_task(self, handler, *args, **kwargs):
-        task = asyncio.ensure_future(handler(*args, **kwargs))
-        self.tasks.append(task)
-        return task
-
-    def show_dialog(self, dialog):
-        pass
-
-    def pop_dialog(self):
-        return None
+from frontend.tests.ui_harness import build_app as _build_app, table_rows
 
 
 def build_app():
-    state = AppState()
-    page = FakePage()
-    ctx = AppContext(page=page, gateway=ServiceGateway(DemoService(), DemoBackendError, demo=True),
-                     state=state, file_picker=None)
-    toasts = []
-    ctx.toast = lambda level, text: toasts.append((level, text))
-
-    async def confirm(*_args):
-        return True
-
-    ctx.confirm = confirm
-    views = [ArchitectureView(ctx), DataView(ctx), TrainingView(ctx), EvaluationView(ctx), PredictionView(ctx)]
-    state.subscribe(lambda: [v.refresh() for v in views])
-    ctx.adjust_architecture = lambda n_in, n_out: views[0].set_io_counts(n_in, n_out)
+    state, page, views, toasts, _gateway = _build_app()
     return state, page, views, toasts
 
 
@@ -88,6 +47,7 @@ def test_fluxo_completo_de_regressao(csv_regressao):
         assert data.compat_message.visible and not data.adjust_btn.visible  # compatível
         await data._on_load(None)
         assert state.has_dataset and state.dataset["rows"] == 60
+        assert table_rows(data)[0] == ["0", "0", "0", "1"]  # prévia {"x", "y"} vira células
 
         data.train_pct.value, data.val_pct.value, data.test_pct.value = "60", "20", "20"
         await data._on_split(None)
@@ -107,7 +67,7 @@ def test_fluxo_completo_de_regressao(csv_regressao):
 
         await ev._on_evaluate_all(None)
         assert set(state.evaluations) == {"train", "val", "test"}
-        assert ev.comparison_section.visible  # y_true/y_pred disponíveis no demo
+        assert not ev.comparison_section.visible  # o service não devolve y_true/y_pred
         assert not ev.confusion_section.visible  # regressão: sem matriz
 
         pred.paste.value = "10; 3; 5"
@@ -129,7 +89,8 @@ def test_fluxo_de_classificacao(csv_classes):
         await arch._on_create(None)
         await data.open_csv(csv_classes)
         await data._on_load(None)
-        assert state.class_labels == ["x", "y", "z"]
+        assert state.class_labels == ["x", "y", "z"]  # lidos de service.meta
+        assert table_rows(data)[0][-1] == "x"  # y one-hot decodificado para o rótulo
         await data._on_split(None)
         train.epochs.value = "5"
         await train._on_start(None)
@@ -140,6 +101,32 @@ def test_fluxo_de_classificacao(csv_classes):
             f.value = v
         await pred._on_predict(None)
         assert pred._history[0][1]["label"] in {"x", "y", "z"}
+
+    asyncio.run(flow())
+
+
+def test_grafico_desejado_estimado_aparece_se_o_service_devolver_y(csv_regressao):
+    """Extensão opcional: com y_true/y_pred no evaluate, a aba mostra o gráfico e MAE/R²."""
+    async def flow():
+        state, page, views, _toasts, gateway = _build_app()
+        arch, data, _train, ev, _pred = views
+        original = gateway.service.evaluate
+
+        def evaluate_with_y(subset="test"):
+            result = original(subset)
+            result.update(y_true=[[1.0], [2.0], [3.0]], y_pred=[[1.1], [1.9], [3.2]])
+            return result
+
+        gateway.service.evaluate = evaluate_with_y
+        arch.n_inputs.value = "3"
+        await arch._on_create(None)
+        await data.open_csv(csv_regressao)
+        await data._on_load(None)
+        await data._on_split(None)
+        await ev._on_evaluate(None)
+        assert ev.comparison_section.visible
+        labels = [tile.content.label for tile in ev.metrics.controls]
+        assert any(label.startswith("R²") for label in labels)
 
     asyncio.run(flow())
 

@@ -41,6 +41,7 @@ class AppState:
 
     # Modelo carregado
     loaded_meta: dict = field(default_factory=dict)
+    loaded_normalization: str | None = None  # normalização salva no arquivo do modelo
 
     _listeners: list[Callable[[], None]] = field(default_factory=list, repr=False)
 
@@ -97,8 +98,9 @@ class AppState:
     def n_params(self) -> int | None:
         if not self.network:
             return None
-        if "n_params" in self.network:
-            return int(self.network["n_params"])
+        for key in ("total_parameters", "n_params"):  # backend real usa "total_parameters"
+            if key in self.network:
+                return int(self.network[key])
         from frontend.analysis import count_parameters
 
         return count_parameters(self.n_inputs or 0, [s["neurons"] for s in self.layer_specs])
@@ -139,6 +141,7 @@ class AppState:
         self.model_origin = "created"
         self.model_path = None
         self.loaded_meta = {}
+        self.loaded_normalization = None
         # O service reseta divisão/normalização/histórico; o dataset precisa
         # ser recarregado para checar compatibilidade (e recodificar classes).
         self.dataset = None
