@@ -51,7 +51,7 @@ def csv_regressao(tmp_path: Path) -> Path:
         writer = csv.writer(f)
         writer.writerow(["a", "b", "y"])
         for ai, bi, yi in zip(a, b, y):
-            writer.writerow([f"{ai:.6f}", f"{bi:.6f}", f"{yi:.6f}"])
+            writer.writerow([f"{ai}", f"{bi}", f"{yi}"])
     return file_path
 
 

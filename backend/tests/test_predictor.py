@@ -6,7 +6,7 @@ from backend.network import NeuralNetwork
 from backend.normalization import apply_normalization
 from backend.persistence import LoadedModel, load_model, save_model
 from backend.predictor import predict
-from tests.helpers import params_iguais, snapshot_params
+from backend.tests.helpers import params_iguais, snapshot_params
 
 
 def _modelo_com_norm() -> LoadedModel:

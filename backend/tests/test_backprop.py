@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from backend.losses import mse
 from backend.network import NeuralNetwork
-from tests.helpers import numeric_gradients, params_iguais, snapshot_params
+from backend.tests.helpers import numeric_gradients, params_iguais, snapshot_params
 
 
 def _analiticos(net: NeuralNetwork):

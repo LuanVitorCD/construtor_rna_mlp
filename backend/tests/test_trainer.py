@@ -4,7 +4,7 @@ from backend.dataset import Dataset
 from backend.errors import ConfigError, DatasetError
 from backend.network import NeuralNetwork
 from backend.trainer import Trainer
-from tests.helpers import params_iguais, snapshot_params
+from backend.tests.helpers import params_iguais, snapshot_params
 
 
 def _dados_linha() -> tuple[Dataset, Dataset]:

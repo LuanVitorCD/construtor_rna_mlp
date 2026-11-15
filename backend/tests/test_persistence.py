@@ -6,7 +6,7 @@ from backend.errors import PersistenceError
 from backend.network import NeuralNetwork
 from backend.normalization import apply_normalization
 from backend.persistence import load_model, save_model
-from tests.helpers import params_iguais, snapshot_params
+from backend.tests.helpers import params_iguais, snapshot_params
 
 
 def _rede_exemplo() -> NeuralNetwork:

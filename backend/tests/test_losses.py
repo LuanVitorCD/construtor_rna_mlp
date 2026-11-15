@@ -3,7 +3,7 @@ import pytest
 from backend.dataset import load_csv, split
 from backend.losses import evaluate_mse, mse
 from backend.network import NeuralNetwork
-from tests.helpers import params_iguais, snapshot_params
+from backend.tests.helpers import params_iguais, snapshot_params
 
 
 def test_mse_manual():

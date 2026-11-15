@@ -3,7 +3,7 @@ import pytest
 from backend.activations import get_activation
 from backend.errors import ConfigError, DatasetError
 from backend.network import NeuralNetwork
-from tests.helpers import params_iguais, snapshot_params
+from backend.tests.helpers import params_iguais, snapshot_params
 
 
 def test_construcao_dinamica_encadeia_as_entradas():

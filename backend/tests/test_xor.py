@@ -1,6 +1,6 @@
 import pytest
 from backend.losses import evaluate_mse
-from tests.helpers import numeric_gradients
+from backend.tests.helpers import numeric_gradients
 
 SAIDAS_SLIDE = {
     (0, 0): 0.4036,

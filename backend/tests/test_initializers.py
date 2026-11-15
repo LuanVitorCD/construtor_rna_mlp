@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from backend.initializers import init_layer_params
 from backend.network import NeuralNetwork
-from tests.helpers import params_iguais, snapshot_params
+from backend.tests.helpers import params_iguais, snapshot_params
 
 
 def test_formatos_e_vies_zero():
