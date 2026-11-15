@@ -83,7 +83,9 @@ class AppShell:
         self.keys_btn = ft.IconButton(ft.Icons.KEYBOARD, on_click=self._on_show_shortcuts,
                                       tooltip="Atalhos de teclado")
         self.title_text = ft.Text(APP_TITLE, theme_style=ft.TextThemeStyle.TITLE_LARGE, weight=ft.FontWeight.W_700)
-        self.subtitle_text = ft.Text(APP_SUBTITLE, theme_style=ft.TextThemeStyle.BODY_SMALL)
+        # Subtítulo longo: 1 linha com reticências em janelas estreitas; texto completo no tooltip.
+        self.subtitle_text = ft.Text(APP_SUBTITLE, theme_style=ft.TextThemeStyle.BODY_SMALL, max_lines=1,
+                                     overflow=ft.TextOverflow.ELLIPSIS, tooltip=APP_SUBTITLE)
         self.appbar = ft.AppBar(
             leading=ft.Icon(ft.Icons.HUB, semantics_label="Logotipo"),
             leading_width=56,

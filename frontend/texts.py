@@ -7,8 +7,11 @@ Terminologia e orientações seguem o material da disciplina:
 - Goodfellow, Bengio e Courville, *Deep Learning*.
 """
 
-APP_TITLE = "MLP Configurável"
-APP_SUBTITLE = "Perceptron multicamadas: regressão, com classificação como extra"
+APP_TITLE = "Construtor de Redes Neurais MLP"
+APP_SUBTITLE = (
+    "Sistema configurável para construir, treinar, armazenar e utilizar Redes Neurais "
+    "Artificiais (RNAs) do tipo Multilayer Perceptron (MLP)"
+)
 
 TASK_LABELS = {
     "regression": "Regressão",
