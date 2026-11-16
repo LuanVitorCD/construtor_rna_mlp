@@ -1,7 +1,8 @@
 """Frontend × backend real: as telas usando o ``backend.service.MLPService`` de verdade.
 
 Confere se o que a UI envia e lê bate com o service implementado (formatos de retorno,
-erros, threads de treino). Pulado se o pacote ``backend`` não estiver disponível.
+erros, threads de treino), nos dois modos da aplicação. Pulado se o pacote ``backend``
+não estiver disponível.
 """
 
 import asyncio
@@ -11,7 +12,9 @@ import pytest
 service_module = pytest.importorskip("backend.service")
 from backend.errors import BackendError  # noqa: E402
 
-from frontend.tests.ui_harness import build_app, table_rows  # noqa: E402
+from frontend.model_files import read_model  # noqa: E402
+from frontend.tests.ui_harness import build_app, build_use_app, table_rows  # noqa: E402
+from frontend.views.architecture import IO_CUSTOM  # noqa: E402
 
 
 def real_app():
@@ -40,27 +43,21 @@ def csv_classes(tmp_path):
     return str(path)
 
 
-def test_regressao_ponta_a_ponta_com_backend_real(csv_regressao, tmp_path):
+def test_criar_modelo_de_regressao_ponta_a_ponta(csv_regressao, tmp_path):
     async def flow():
         state, page, views, _toasts, gateway = real_app()
-        arch, data, train, ev, pred = views
-        assert state.activations == ["linear", "sigmoid", "tanh", "relu"] or state.activations
-
-        arch.n_inputs.value = "3"
-        await arch._on_create(None)
-        assert state.network["total_parameters"] == state.n_params == 16  # 3-3-1
-        assert [s["neurons"] for s in state.layer_specs] == [3, 1]  # backend usa "n_neurons"
+        data, arch, train, ev, pred = views
 
         await data.open_csv(csv_regressao)
         assert state.columns == ["area", "quartos", "idade", "preco"]
-        await data._on_load(None)
-        assert state.has_dataset and state.dataset["rows"] == 80
-        assert table_rows(data)[0] == ["40", "1", "0", "100"]  # prévia {"x","y"} do backend
-
-        await data._on_split(None)
-        assert (state.split_size("train"), state.split_size("val"), state.split_size("test")) == (56, 12, 12)
+        assert (arch.n_inputs.value, arch.n_outputs.value) == ("3", "1")  # automático pelo CSV
         data.norm_group.value = "zscore"
-        await data._on_norm_change(None)
+        await arch._on_create(None)  # backend: create_network + load_dataset + split + normalização
+        assert state.network["total_parameters"] == state.n_params == 16  # 3-3-1
+        assert [s["neurons"] for s in state.layer_specs] == [3, 1]  # backend usa "n_neurons"
+        assert state.data_ready and state.dataset["rows"] == 80
+        assert table_rows(data)[0] == ["40", "1", "0", "100"]  # prévia {"x","y"} do backend
+        assert (state.split_size("train"), state.split_size("val"), state.split_size("test")) == (56, 12, 12)
         assert state.normalization == "zscore" and gateway.read_norm_kind() == "zscore"
 
         train.epochs.value, train.lr.value, train.shuffle_seed.value = "15", "0,01", "1"
@@ -80,23 +77,18 @@ def test_regressao_ponta_a_ponta_com_backend_real(csv_regressao, tmp_path):
         await pred._on_predict(None)
         assert not pred.message.visible and len(pred._history[0][1]["outputs"]) == 1
 
-        # Salvar e abrir de novo (mesma lógica do botão "Abrir modelo")
+        # Salvar e abrir no modo "Usar modelo existente"
         model = str(tmp_path / "modelo.json")
         await gateway.call("save", model)
-        fresh_state, _page2, fresh_views, _t, fresh_gw = real_app()
-        await fresh_gw.call("load", model)
-        description = await fresh_gw.call("describe_network")
-        fresh_state.loaded_meta = description.get("meta") or fresh_gw.read_meta()
-        fresh_state.on_model_loaded(description, model)
-        fresh_state.loaded_normalization = fresh_gw.read_norm_kind()
-        fresh_state.notify()
-        assert fresh_state.input_names() == ["area", "quartos", "idade"]
-        assert fresh_state.output_names() == ["preco"]
-        assert fresh_state.loaded_normalization == "zscore"
-        assert [f.label for f in fresh_views[4].fields] == ["area", "quartos", "idade"]
-        assert fresh_views[1].model_note.level == "warning"  # aviso sobre a normalização salva
+        ustate, _upage, (info, upred), _t, ugw = await build_use_app(model, service_module.MLPService(),
+                                                                     BackendError)
+        assert ustate.input_names() == ["area", "quartos", "idade"]
+        assert ustate.output_names() == ["preco"]
+        assert ustate.loaded_normalization == "zscore"
+        assert [f.label for f in upred.fields] == ["area", "quartos", "idade"]
+        assert info.file_name.value == "modelo.json"
         # Mesma rede, mesma normalização -> mesma saída
-        same = await fresh_gw.call("predict", [100.0, 2.0, 10.0])
+        same = await ugw.call("predict", [100.0, 2.0, 10.0])
         assert same["outputs"] == pytest.approx(pred._history[0][1]["outputs"])
 
     asyncio.run(flow())
@@ -105,17 +97,15 @@ def test_regressao_ponta_a_ponta_com_backend_real(csv_regressao, tmp_path):
 def test_classificacao_com_backend_real(csv_classes):
     async def flow():
         state, page, views, _toasts, _gateway = real_app()
-        arch, data, train, ev, pred = views
-        arch.task.selected = ["classification"]
-        arch._on_task_change(None)
-        arch.n_inputs.value, arch.out_neurons.value = "2", "3"
-        await arch._on_create(None)
+        data, arch, train, ev, pred = views
+        data.task.selected = ["classification"]
+        data._on_task_change(None)
         await data.open_csv(csv_classes)
-        await data._on_load(None)
-        assert state.has_dataset
+        assert state.suggested_io() == (2, 3)  # 3 classes contadas antes da rede existir
+        await arch._on_create(None)
+        assert state.data_ready
         assert state.class_labels == ["setosa", "versicolor", "virginica"]  # via service.meta
         assert table_rows(data)[0][-1] == "setosa"  # one-hot decodificado
-        await data._on_split(None)
         train.epochs.value, train.lr.value = "30", "0,1"
         await train._on_start(None)
         await asyncio.wait_for(page.tasks[-1], timeout=60)
@@ -131,25 +121,54 @@ def test_classificacao_com_backend_real(csv_classes):
     asyncio.run(flow())
 
 
+def test_modelo_como_base_com_backend_real(csv_classes, tmp_path):
+    async def flow():
+        state, _page, views, _toasts, gateway = real_app()
+        data, arch, _train, _ev, _pred = views
+        data.task.selected = ["classification"]
+        data._on_task_change(None)
+        await data.open_csv(csv_classes)
+        await arch._on_create(None)
+        model = str(tmp_path / "base.json")
+        await gateway.call("save", model)
+
+        state2, _p2, views2, _t2, gateway2 = real_app()
+        data2, arch2 = views2[0], views2[1]
+        await data2.open_csv(csv_classes)
+        info = await read_model(gateway2, model)
+        state2.forget_network()
+        data2.apply_template(info)
+        arch2.apply_template(info)
+        state2.notify()
+        assert state2.task_choice == "classification"
+        assert (arch2.n_inputs.value, arch2.n_outputs.value) == ("2", "3")
+        await arch2._on_create(None)
+        assert state2.data_ready and state2.architecture_text() == "2–3–3"
+
+    asyncio.run(flow())
+
+
 def test_erros_do_backend_viram_mensagens(csv_regressao):
     async def flow():
         state, page, views, _toasts, _gateway = real_app()
-        arch, data, train, _ev, _pred = views
-        await arch._on_create(None)  # rede 2-3-1, CSV tem 3 entradas
+        data, arch, train, _ev, _pred = views
         await data.open_csv(csv_regressao)
-        await data._on_load(None)
-        assert not state.has_dataset
-        assert data.load_message.level == "error" and data.load_message.title == "Problema nos dados"
+        arch.io_mode.selected = [IO_CUSTOM]
+        arch._on_io_mode_change(None)
+        arch.n_inputs.value = "2"  # CSV tem 3 entradas
+        await arch._on_create(None)
+        assert state.has_network and not state.has_dataset
+        assert data.apply_message.level == "error" and data.apply_message.title == "Problema nos dados"
+        assert arch.message.level == "error"
 
         arch.n_inputs.value = "3"
-        await arch._on_create(None)
-        await data._on_load(None)
         data.train_pct.value, data.val_pct.value, data.test_pct.value = "0,5", "0,5", "99"
-        await data._on_split(None)  # 0,5% de 80 linhas = 0 amostras -> DatasetError do backend
-        assert not state.has_split and data.split_message.level == "error"
+        await arch._on_create(None)  # 0,5% de 80 linhas = 0 amostras -> DatasetError do backend
+        assert not state.has_split and data.apply_message.level == "error"
 
         data.train_pct.value, data.val_pct.value, data.test_pct.value = "70", "15", "15"
-        await data._on_split(None)
+        await data._on_apply(None)
+        assert state.data_ready
         train.epochs.value = "100000"
         await train._on_start(None)
         await asyncio.sleep(0.2)

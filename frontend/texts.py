@@ -54,6 +54,24 @@ HELP = {
         "ou one-hot (uma saída por classe) e treinada com o mesmo MSE."
     ),
     "inputs": "Quantidade de atributos de entrada. Deve ser igual ao nº de colunas de entrada do CSV.",
+    "io_auto": (
+        "Automático: o nº de entradas é o nº de colunas de entrada marcadas na aba Dados; o de "
+        "saídas é o nº de colunas de saída (regressão) ou vem das classes do rótulo "
+        "(binária: 1 neurônio; multiclasse: 1 por classe)."
+    ),
+    "io_custom": (
+        "Personalizado: você digita os números. Se forem diferentes do que o CSV pede, a rede é "
+        "criada, mas os dados não poderão ser usados para treiná-la."
+    ),
+    "apply_data": (
+        "Os dados são carregados, divididos e normalizados quando você cria a rede (aba "
+        "Arquitetura). Se mudar algo aqui depois, clique em “Aplicar dados à rede”."
+    ),
+    "template": (
+        "Usar um modelo como base preenche o formulário com a configuração dele (tarefa, camadas, "
+        "ativações, colunas e normalização). Os pesos não são reaproveitados: a nova rede começa "
+        "com pesos aleatórios ao clicar em “Criar rede”."
+    ),
     "hidden": (
         "Uma camada oculta costuma bastar (Haykin). Para o nº de neurônios, a regra de "
         "Kolmogorov sugere 2n + 1, com n = nº de entradas. Se duas redes generalizam igual, "
@@ -115,10 +133,25 @@ HELP = {
     ),
 }
 
+MODE_LABELS = {
+    "create": "Criar novo modelo",
+    "use": "Usar modelo existente",
+}
+
+MODE_DESCRIPTIONS = {
+    "create": (
+        "Escolha um CSV, monte a arquitetura, treine, avalie e salve a rede. "
+        "Também dá para partir da configuração de um modelo salvo."
+    ),
+    "use": "Abra um modelo salvo (JSON) para ver as informações dele e fazer previsões.",
+}
+
 SHORTCUTS = [
-    ("Ctrl + 1 … 5", "Ir para Arquitetura, Dados, Treinamento, Avaliação ou Previsão"),
-    ("Ctrl + O", "Abrir modelo salvo (JSON)"),
-    ("Ctrl + S", "Salvar modelo (JSON)"),
+    ("Ctrl + 1 … 5", "Ir para cada aba do modo atual (na ordem do menu lateral)"),
+    ("Ctrl + N", "Menu inicial: começar “Criar novo modelo”"),
+    ("Ctrl + O", "Abrir modelo salvo (no modo Criar: usar como base)"),
+    ("Ctrl + S", "Salvar modelo (JSON), no modo Criar"),
+    ("Ctrl + M", "Voltar ao menu de escolha de modo"),
     ("Ctrl + T", "Alternar tema claro/escuro"),
     ("Tab / Shift + Tab", "Navegar entre os campos"),
     ("Enter", "Confirmar a ação principal do campo"),

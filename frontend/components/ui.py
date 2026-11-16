@@ -233,9 +233,10 @@ def requirement_list(items: list[tuple[str, bool]]) -> ft.Column:
                         semantics_label="feito" if done else "pendente",
                     ),
                     ft.Text(text + ("" if done else " (pendente)"),
-                            color=C.ON_SURFACE if done else C.ON_SURFACE_VARIANT),
+                            color=C.ON_SURFACE if done else C.ON_SURFACE_VARIANT, expand=True),
                 ],
                 spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.START,
             )
         )
     return ft.Column(rows, spacing=6, tight=True)
@@ -252,3 +253,37 @@ def learn_more(title: str, text: str) -> ft.ExpansionTile:
         collapsed_shape=ft.RoundedRectangleBorder(radius=8),
         dense=True,
     )
+
+
+def architecture_table(n_inputs: int, layer_specs: list[dict]) -> ft.Control:
+    """Tabela "camada × neurônios × ativação × parâmetros" (com rolagem horizontal)."""
+    from frontend.parsing import format_number
+    from frontend.texts import ACTIVATION_RANGES
+
+    rows = []
+    fan_in = n_inputs
+    for i, spec in enumerate(layer_specs):
+        is_out = i == len(layer_specs) - 1
+        params = (fan_in + 1) * spec["neurons"]
+        fan_in = spec["neurons"]
+        rows.append(ft.DataRow(cells=[
+            ft.DataCell(ft.Text("Saída" if is_out else f"Oculta {i + 1}")),
+            ft.DataCell(ft.Text(str(spec["neurons"]))),
+            ft.DataCell(ft.Text(activation_label(spec["activation"]))),
+            ft.DataCell(ft.Text(ACTIVATION_RANGES.get(spec["activation"], ""))),
+            ft.DataCell(ft.Text(format_number(params))),
+        ]))
+    table = ft.DataTable(
+        columns=[
+            ft.DataColumn(ft.Text("Camada")),
+            ft.DataColumn(ft.Text("Neurônios"), numeric=True),
+            ft.DataColumn(ft.Text("Ativação")),
+            ft.DataColumn(ft.Text("Faixa")),
+            ft.DataColumn(ft.Text("Parâmetros"), numeric=True),
+        ],
+        rows=rows,
+        heading_text_style=ft.TextStyle(weight=ft.FontWeight.W_600, color=C.ON_SURFACE),
+        column_spacing=20,
+        horizontal_margin=8,
+    )
+    return ft.Row([table], scroll=ft.ScrollMode.AUTO)

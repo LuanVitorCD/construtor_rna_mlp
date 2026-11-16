@@ -1,6 +1,14 @@
-"""Aba 1: definir a arquitetura da MLP sem tocar no código (requisito 2.4 do enunciado)."""
+"""Aba 2 do modo "Criar novo modelo": a arquitetura da MLP, sem tocar no código.
+
+Entradas e saídas podem vir automaticamente das colunas escolhidas na aba Dados
+("Automático") ou ser digitadas ("Personalizado"). Ao criar a rede, os dados da aba
+Dados já são carregados, divididos e normalizados: se algo não bater, o erro aparece
+aqui mesmo, sem precisar voltar uma página.
+"""
 
 from __future__ import annotations
+
+import os
 
 import flet as ft
 
@@ -9,6 +17,7 @@ from frontend.components.network_diagram import NetworkDiagram
 from frontend.components.ui import (
     Message,
     activation_dropdown,
+    architecture_table,
     body,
     learn_more,
     number_field,
@@ -17,10 +26,11 @@ from frontend.components.ui import (
 from frontend.context import AppContext
 from frontend.parsing import ParseError, format_number, parse_int
 from frontend.service_gateway import GatewayError
-from frontend.texts import ACTIVATION_RANGES, HELP, TASK_LABELS, activation_label
+from frontend.texts import HELP, TASK_LABELS
 
 C = ft.Colors
 MAX_HIDDEN = 6
+IO_AUTO, IO_CUSTOM = "auto", "custom"
 
 
 class _HiddenRow:
@@ -57,35 +67,44 @@ class ArchitectureView:
     def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
         state = ctx.state
+        self._last_task = state.task_choice
 
-        self.task = ft.SegmentedButton(
+        # --- entradas e saídas
+        self.task_text = body("", muted=False)
+        self.io_mode = ft.SegmentedButton(
             segments=[
-                ft.Segment(value="regression", label=ft.Text(TASK_LABELS["regression"]),
-                           icon=ft.Icon(ft.Icons.SHOW_CHART)),
-                ft.Segment(value="classification", label=ft.Text(TASK_LABELS["classification"]),
-                           icon=ft.Icon(ft.Icons.CALL_SPLIT)),
+                ft.Segment(value=IO_AUTO, label=ft.Text("Automático (do CSV)"), icon=ft.Icon(ft.Icons.AUTO_FIX_HIGH)),
+                ft.Segment(value=IO_CUSTOM, label=ft.Text("Personalizado"), icon=ft.Icon(ft.Icons.EDIT)),
             ],
-            selected=[state.task],
+            selected=[IO_AUTO],
             allow_empty_selection=False,
-            allow_multiple_selection=False,
-            on_change=self._on_task_change,
+            on_change=self._on_io_mode_change,
         )
-        self.n_inputs = number_field("Nº de entradas", "2", integer=True, width=180,
-                                     helper=None, on_change=self._on_draft_change, autofocus=True,
-                                     tooltip=HELP["inputs"])
+        self.n_inputs = number_field("Nº de entradas", "", integer=True, width=180,
+                                     on_change=self._on_draft_change, tooltip=HELP["inputs"])
+        self.n_outputs = number_field("Neurônios de saída", "", integer=True, width=180,
+                                      on_change=self._on_draft_change)
+        self.io_message = Message()
+        self.go_data_btn = ft.TextButton("Ir para a aba Dados", icon=ft.Icons.ARROW_BACK,
+                                         on_click=lambda _e: self.ctx.navigate(0))
+
+        # --- camadas ocultas
         self.hidden_rows: list[_HiddenRow] = []
         self.hidden_column = ft.Column(spacing=12, tight=True)
         self.add_hidden_btn = ft.OutlinedButton("Adicionar camada oculta", icon=ft.Icons.ADD,
                                                 on_click=self._on_add_hidden)
         self.suggest_btn = ft.TextButton("Sugerir neurônios (2n + 1)", icon=ft.Icons.AUTO_FIX_HIGH,
                                          on_click=self._on_suggest, tooltip="Regra de Kolmogorov (Ivan Nunes, cap. 5)")
-        self.out_neurons = number_field("Neurônios", "1", integer=True, width=140,
-                                        on_change=self._on_draft_change)
-        self.out_activation = activation_dropdown("linear", state.activations,
-                                                  on_select=self._on_draft_change)
+
+        # --- camada de saída
+        self.out_activation = activation_dropdown(
+            "sigmoid" if state.task_choice == "classification" else "linear", state.activations,
+            label="Função de ativação da saída", on_select=self._on_draft_change)
         self.out_activation.expand = True
         self.out_help = body("")
         self.out_warning = Message()
+
+        # --- inicialização e ação
         self.seed = number_field("Semente (seed)", "42", integer=True, width=180, hint="aleatória",
                                  helper="Em branco = aleatória", on_change=self._on_draft_change)
         self.param_count = body("", muted=False)
@@ -100,26 +119,36 @@ class ArchitectureView:
 
         form = ft.Column(
             [
-                section("1. Tipo de tarefa", [self.task, body(HELP["task"])], icon=ft.Icons.TUNE),
                 section(
-                    "2. Camadas",
+                    "1. Entradas e saídas",
                     [
-                        ft.Row([self.n_inputs], wrap=True),
-                        ft.Text("Camadas ocultas", theme_style=ft.TextThemeStyle.TITLE_SMALL, color=C.ON_SURFACE),
+                        self.task_text,
+                        self.io_mode,
+                        ft.Row([self.n_inputs, self.n_outputs], wrap=True, spacing=12,
+                               vertical_alignment=ft.CrossAxisAlignment.START),
+                        self.io_message.root,
+                        ft.Row([self.go_data_btn]),
+                        learn_more("Automático ou personalizado?", HELP["io_auto"] + "\n\n" + HELP["io_custom"]),
+                    ],
+                    icon=ft.Icons.INPUT,
+                ),
+                section(
+                    "2. Camadas ocultas",
+                    [
                         self.hidden_column,
                         ft.Row([self.add_hidden_btn, self.suggest_btn], wrap=True, spacing=8),
-                        ft.Divider(color=C.OUTLINE_VARIANT),
-                        ft.Text("Camada de saída", theme_style=ft.TextThemeStyle.TITLE_SMALL, color=C.ON_SURFACE),
-                        ft.Row([self.out_neurons, self.out_activation, ft.Container(width=48)], spacing=12,
-                               vertical_alignment=ft.CrossAxisAlignment.START),
-                        self.out_help,
-                        self.out_warning.root,
                         learn_more("Como escolher camadas e neurônios?", HELP["hidden"]),
                     ],
                     icon=ft.Icons.ACCOUNT_TREE,
                 ),
                 section(
-                    "3. Inicialização",
+                    "3. Camada de saída",
+                    [ft.Row([self.out_activation, ft.Container(width=48)], spacing=12),
+                     self.out_help, self.out_warning.root],
+                    icon=ft.Icons.OUTPUT,
+                ),
+                section(
+                    "4. Inicialização",
                     [ft.Row([self.seed], wrap=True), body(HELP["init"])],
                     icon=ft.Icons.SCIENCE,
                 ),
@@ -142,7 +171,6 @@ class ArchitectureView:
         )
         self.root = ft.ResponsiveRow([form, preview], spacing=16, run_spacing=16)
         self._apply_task_texts()
-        self._on_draft_change(None)
         self.refresh()
 
     # ------------------------------------------------------------ camadas ocultas
@@ -180,7 +208,7 @@ class ArchitectureView:
         try:
             n_in = parse_int(self.n_inputs.value, field="Nº de entradas", minimum=1)
         except ParseError as err:
-            self.n_inputs.error = str(err)
+            self.n_inputs.error = str(err).split(": ", 1)[-1].capitalize()
             return
         if not self.hidden_rows:
             self._add_hidden(3, "tanh")
@@ -190,18 +218,65 @@ class ArchitectureView:
         self._on_draft_change(None)
         self.ctx.toast("info", f"Sugestão aplicada: {suggestion} neurônios por camada oculta (2 × {n_in} + 1).")
 
-    # ------------------------------------------------------------------ tarefa
-    def _selected_task(self) -> str:
-        return (self.task.selected or ["regression"])[0]
+    # ----------------------------------------------------------- entradas/saídas
+    def _io_mode(self) -> str:
+        return (self.io_mode.selected or [IO_AUTO])[0]
 
-    def _on_task_change(self, _e) -> None:
-        task = self._selected_task()
-        self.out_activation.value = "linear" if task == "regression" else "sigmoid"
-        self._apply_task_texts()
+    def _on_io_mode_change(self, _e) -> None:
+        self._sync_io()
         self._on_draft_change(None)
+        self.create_btn.disabled = self._create_blocked()
 
+    def _sync_io(self) -> None:
+        """Preenche (Automático) ou confere (Personalizado) entradas/saídas com o CSV."""
+        state = self.ctx.state
+        auto = self._io_mode() == IO_AUTO
+        suggestion = state.suggested_io()
+        for field in (self.n_inputs, self.n_outputs):
+            field.read_only = auto
+            field.filled = auto
+            field.fill_color = C.SURFACE_CONTAINER_HIGH if auto else None
+        self.go_data_btn.visible = suggestion is None
+        if auto:
+            if suggestion:
+                self.n_inputs.value, self.n_outputs.value = str(suggestion[0]), str(suggestion[1])
+                self.n_inputs.error = self.n_outputs.error = None
+                name = os.path.basename(state.csv_path or "")
+                self.io_message.show("success", "Preenchido a partir do CSV",
+                                     f"{name}: entradas = {', '.join(state.input_cols)}; "
+                                     f"saída = {', '.join(state.output_cols)}.")
+            else:
+                self.n_inputs.value = self.n_outputs.value = ""
+                self.io_message.show("info", "Escolha os dados primeiro",
+                                     "Na aba Dados, escolha o CSV e marque as colunas de entrada e de saída "
+                                     "(e a tarefa). Ou use o modo Personalizado.")
+            return
+        if not suggestion:
+            self.io_message.show("info", "Sem dados escolhidos",
+                                 "A rede pode ser criada assim, mas para treiná-la será preciso escolher na aba "
+                                 "Dados um CSV com o mesmo nº de entradas e saídas.")
+            return
+        try:
+            typed = (int(self.n_inputs.value or ""), int(self.n_outputs.value or ""))
+        except ValueError:
+            typed = None
+        if typed != suggestion:
+            self.io_message.show("warning", "Diferente do CSV escolhido",
+                                 f"Os dados pedem {suggestion[0]} entrada(s) e {suggestion[1]} neurônio(s) de "
+                                 "saída. Com outros valores, a rede é criada, mas os dados não poderão ser usados "
+                                 "para treiná-la.")
+        else:
+            self.io_message.show("success", "Igual ao CSV escolhido",
+                                 f"{suggestion[0]} entrada(s) e {suggestion[1]} neurônio(s) de saída.")
+
+    def _create_blocked(self) -> bool:
+        state = self.ctx.state
+        return state.training or (self._io_mode() == IO_AUTO and state.suggested_io() is None)
+
+    # ------------------------------------------------------------------ tarefa
     def _apply_task_texts(self) -> None:
-        task = self._selected_task()
+        task = self.ctx.state.task_choice
+        self.task_text.value = f"Tarefa escolhida na aba Dados: {TASK_LABELS.get(task, task)}."
         self.out_help.value = HELP["output_regression"] if task == "regression" else HELP["output_classification"]
 
     # --------------------------------------------------------------- rascunho
@@ -227,44 +302,50 @@ class ArchitectureView:
         for i, r in enumerate(self.hidden_rows, start=1):
             n = read_int(r.neurons, f"Neurônios da oculta {i}")
             layers.append({"neurons": n, "activation": r.activation.value})
-        n_out = read_int(self.out_neurons, "Neurônios de saída")
+        n_out = read_int(self.n_outputs, "Neurônios de saída")
         layers.append({"neurons": n_out, "activation": self.out_activation.value})
         seed = read_int(self.seed, "Semente", allow_empty=True, minimum=0)
         if not fields_ok:
             return None
         return n_in, layers, seed  # type: ignore[return-value]
 
-    def _on_draft_change(self, _e) -> None:
-        draft = self._draft(strict=False)
-        task = self._selected_task()
-        warning = output_activation_warning(task, self.out_activation.value or "")
+    def _on_draft_change(self, e) -> None:
+        state = self.ctx.state
+        if e is not None and self._io_mode() == IO_CUSTOM:
+            self._sync_io()  # recompara com o CSV a cada digitação
+        warning = output_activation_warning(state.task_choice, self.out_activation.value or "")
         if warning:
             self.out_warning.show("warning", "Ativação de saída", warning)
         else:
             self.out_warning.clear()
+        draft = self._draft(strict=False)
         if draft is None:
             self.param_count.value = ""
             return
         n_in, layers, _seed = draft
         n_params = count_parameters(n_in, [l["neurons"] for l in layers])
         self.param_count.value = f"{format_number(n_params)} parâmetros (pesos + vieses)"
-        state = self.ctx.state
-        names_in = state.input_names() if state.n_inputs == n_in else None
-        self.diagram.render(n_in, layers, input_names=names_in)
+        n_out = layers[-1]["neurons"]
+        self.diagram.render(n_in, layers, input_names=state.input_names(n_in),
+                            output_names=state.output_names(n_out, task=state.task_choice))
 
     # ----------------------------------------------------------------- ações
     async def _on_create(self, _e) -> None:
         state = self.ctx.state
+        if self._io_mode() == IO_AUTO and state.suggested_io() is None:
+            self.message.show("error", "Faltam os dados",
+                              "No modo Automático, escolha o CSV e as colunas na aba Dados (ou use Personalizado).")
+            return
         draft = self._draft(strict=True)
         if draft is None:
             self.message.show("error", "Corrija os campos destacados", "Há valores inválidos no formulário.")
             return
         n_in, layers, seed = draft
-        task = self._selected_task()
+        task = state.task_choice
         if state.has_network and (state.is_trained or state.has_split):
             ok = await self.ctx.confirm(
                 "Recriar a rede?",
-                "A rede atual, os pesos treinados, a divisão do dataset e o histórico serão descartados.",
+                "A rede atual, os pesos treinados, os dados aplicados e o histórico serão descartados.",
                 "Recriar",
             )
             if not ok:
@@ -280,78 +361,65 @@ class ArchitectureView:
         finally:
             self.create_btn.disabled = False
         state.on_network_created(description or {"n_inputs": n_in, "layers": layers}, task)
-        self.message.show(
-            "success",
-            "Rede criada",
-            f"Arquitetura {state.architecture_text()} com {format_number(state.n_params)} parâmetros. "
-            "Próximo passo: carregar o dataset na aba Dados.",
-        )
+        summary = f"Arquitetura {state.architecture_text()} com {format_number(state.n_params)} parâmetros."
+        if not state.data_selection_ready:
+            self.message.show("success", "Rede criada",
+                              summary + " Para treinar, escolha os dados na aba Dados e clique em "
+                                        "“Aplicar dados à rede”.")
+            state.notify()
+            return
+        ok, error = await self.ctx.prepare_data()
+        if ok:
+            self.message.show(
+                "success", "Rede criada e dados aplicados",
+                f"{summary} Treinamento {state.split_size('train')} · validação {state.split_size('val')} · "
+                f"teste {state.split_size('test')} amostras. Próximo passo: aba Treinamento.")
+        else:
+            self.message.show(
+                "error", "Rede criada, mas os dados não foram aplicados",
+                f"{error} Use o modo Automático (ou corrija os números) e crie a rede de novo.")
         state.notify()
 
-    # ------------------------------------------------------ chamadas externas
-    def set_io_counts(self, n_inputs: int, n_outputs: int) -> None:
-        """Usado pela aba Dados: ajusta entradas/saídas às colunas escolhidas."""
-        self.n_inputs.value = str(n_inputs)
-        self.out_neurons.value = str(n_outputs)
-        self._on_draft_change(None)
-        self.message.show("info", "Formulário ajustado às colunas do CSV",
-                          f"{n_inputs} entrada(s) e {n_outputs} neurônio(s) de saída. Clique em “Criar rede”.")
-
-    def load_from_state(self) -> None:
-        """Preenche o formulário com a rede atual (ex.: depois de abrir um modelo)."""
+    # ------------------------------------------------------------- modelo base
+    def apply_template(self, info) -> None:
+        """Preenche o formulário com a configuração de um modelo salvo (sem os pesos)."""
         state = self.ctx.state
-        if not state.network:
-            return
-        specs = state.layer_specs
-        self.task.selected = [state.task]
-        self.n_inputs.value = str(state.n_inputs)
+        specs = info.layer_specs
         self.hidden_rows = []
         for spec in specs[:-1]:
             self._add_hidden(spec["neurons"], spec["activation"])
         self._reindex()
-        self.out_neurons.value = str(specs[-1]["neurons"])
         self.out_activation.value = specs[-1]["activation"]
+        self._last_task = state.task_choice
+        n_in, n_out = int(info.description.get("n_inputs", 0)), specs[-1]["neurons"]
+        if state.suggested_io() == (n_in, n_out):
+            self.io_mode.selected = [IO_AUTO]
+        else:
+            self.io_mode.selected = [IO_CUSTOM]
+            self.n_inputs.value, self.n_outputs.value = str(n_in), str(n_out)
         self._apply_task_texts()
+        self._sync_io()
         self._on_draft_change(None)
+        self.message.show("info", f"Configuração de “{os.path.basename(info.path)}” aplicada", HELP["template"])
 
+    # ------------------------------------------------------------------ estado
     def refresh(self) -> None:
         state = self.ctx.state
-        self.create_btn.disabled = state.training
+        if state.task_choice != self._last_task:  # tarefa mudou na aba Dados
+            self._last_task = state.task_choice
+            self.out_activation.value = "sigmoid" if state.task_choice == "classification" else "linear"
+        self._apply_task_texts()
+        self._sync_io()
+        self._on_draft_change(None)
+        self.create_btn.disabled = self._create_blocked()
         self.summary_holder.controls = self._summary()
 
     def _summary(self) -> list[ft.Control]:
         state = self.ctx.state
         if not state.network:
             return [body("Nenhuma rede criada ainda. Configure o formulário e clique em “Criar rede”.")]
-        rows = []
-        fan_in = state.n_inputs or 0
-        for i, spec in enumerate(state.layer_specs):
-            is_out = i == len(state.layer_specs) - 1
-            params = (fan_in + 1) * spec["neurons"]
-            fan_in = spec["neurons"]
-            rows.append(ft.DataRow(cells=[
-                ft.DataCell(ft.Text("Saída" if is_out else f"Oculta {i + 1}")),
-                ft.DataCell(ft.Text(str(spec["neurons"]))),
-                ft.DataCell(ft.Text(activation_label(spec["activation"]))),
-                ft.DataCell(ft.Text(ACTIVATION_RANGES.get(spec["activation"], ""))),
-                ft.DataCell(ft.Text(format_number(params))),
-            ]))
-        origin = "Carregada de arquivo" if state.model_origin == "loaded" else "Criada nesta sessão"
-        table = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("Camada")),
-                ft.DataColumn(ft.Text("Neurônios"), numeric=True),
-                ft.DataColumn(ft.Text("Ativação")),
-                ft.DataColumn(ft.Text("Faixa")),
-                ft.DataColumn(ft.Text("Parâmetros"), numeric=True),
-            ],
-            rows=rows,
-            heading_text_style=ft.TextStyle(weight=ft.FontWeight.W_600, color=C.ON_SURFACE),
-            column_spacing=20,
-            horizontal_margin=8,
-        )
         return [
-            body(f"{origin} · Tarefa: {TASK_LABELS.get(state.task, state.task)} · "
-                 f"{state.n_inputs} entrada(s) · {format_number(state.n_params)} parâmetros", muted=False),
-            ft.Row([table], scroll=ft.ScrollMode.AUTO),
+            body(f"Tarefa: {TASK_LABELS.get(state.task, state.task)} · {state.n_inputs} entrada(s) · "
+                 f"{format_number(state.n_params)} parâmetros", muted=False),
+            architecture_table(state.n_inputs or 0, state.layer_specs),
         ]

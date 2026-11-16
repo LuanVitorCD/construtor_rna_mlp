@@ -274,7 +274,7 @@ class EvaluationView:
 
     def refresh(self) -> None:
         state = self.ctx.state
-        ready = state.has_network and state.has_split
+        ready = state.has_network and state.data_ready
         self.eval_btn.disabled = state.training or not ready
         self.eval_all_btn.disabled = state.training or not ready
         if ready:
@@ -283,8 +283,9 @@ class EvaluationView:
                 self.requirements.content = body("A rede ainda não foi treinada: a avaliação usará os pesos iniciais.")
         else:
             self.requirements.content = requirement_list([
-                ("Rede criada ou carregada", state.has_network),
-                ("Dataset carregado e dividido (aba Dados)", state.has_split),
+                ("Rede criada (aba Arquitetura)", state.has_network),
+                ("Dados aplicados à rede (aba Dados)"
+                 + (" — há alterações não aplicadas" if state.data_dirty else ""), state.data_ready),
             ])
         if not state.evaluations:
             self.current = None

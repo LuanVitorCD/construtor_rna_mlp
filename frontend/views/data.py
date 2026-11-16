@@ -1,4 +1,10 @@
-"""Aba 2: CSV, escolha de colunas, divisão treino/validação/teste e normalização."""
+"""Aba 1 do modo "Criar novo modelo": tarefa, CSV, colunas, divisão e normalização.
+
+Vem antes da Arquitetura: com o CSV escolhido, a UI já sabe quantas entradas e saídas a
+rede precisa (modo "Automático" da aba Arquitetura). As escolhas daqui são aplicadas à
+rede (carregar → dividir → normalizar) automaticamente ao criar a rede, ou pelo botão
+"Aplicar dados à rede" depois de alguma alteração.
+"""
 
 from __future__ import annotations
 
@@ -17,9 +23,10 @@ from frontend.components.ui import (
     section,
 )
 from frontend.context import AppContext
+from frontend.csv_utils import MAX_CLASSES, distinct_values
 from frontend.parsing import ParseError, format_number, format_percent, parse_float, parse_int
 from frontend.service_gateway import GatewayError
-from frontend.texts import HELP, NORMALIZATION_LABELS, NORMALIZATION_SHORT, SUBSET_LABELS
+from frontend.texts import HELP, NORMALIZATION_LABELS, NORMALIZATION_SHORT, SUBSET_LABELS, TASK_LABELS
 from frontend.theme import SUCCESS
 
 C = ft.Colors
@@ -32,62 +39,58 @@ class DataView:
     def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
         self._roles: dict[str, str] = {}
+        state = ctx.state
+
+        # --- tarefa
+        self.task = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="regression", label=ft.Text(TASK_LABELS["regression"]),
+                           icon=ft.Icon(ft.Icons.SHOW_CHART)),
+                ft.Segment(value="classification", label=ft.Text(TASK_LABELS["classification"]),
+                           icon=ft.Icon(ft.Icons.CALL_SPLIT)),
+            ],
+            selected=[state.task_choice],
+            allow_empty_selection=False,
+            on_change=self._on_task_change,
+        )
+        self.task_message = Message()
 
         # --- arquivo
-        self.pick_btn = ft.FilledButton("Escolher arquivo CSV…", icon=ft.Icons.UPLOAD_FILE, on_click=self._on_pick)
+        self.pick_btn = ft.FilledButton("Escolher arquivo CSV…", icon=ft.Icons.UPLOAD_FILE, on_click=self._on_pick,
+                                        autofocus=True)
         self.path_text = ft.Text("Nenhum arquivo selecionado.", color=C.ON_SURFACE_VARIANT, selectable=True)
         self.file_message = Message()
-        self.model_note = Message()
 
         # --- colunas
         self.columns_list = ft.Column(spacing=4, tight=True)
         self.role_counts = body("", muted=False)
-        self.compat_message = Message()
-        self.adjust_btn = ft.OutlinedButton("Ajustar arquitetura às colunas", icon=ft.Icons.AUTO_FIX_HIGH,
-                                            on_click=self._on_adjust, visible=False)
-        self.load_btn = ft.FilledButton("Carregar dataset", icon=ft.Icons.DATASET, on_click=self._on_load)
-        self.load_message = Message()
+        self.selection_message = Message()
         self.columns_section = section(
-            "2. Colunas de entrada e de saída",
+            "3. Colunas de entrada e de saída",
             [
                 body(HELP["csv"]),
                 ft.Container(self.columns_list, border=ft.Border.all(1, C.OUTLINE_VARIANT), border_radius=8,
                              padding=8),
                 self.role_counts,
-                self.compat_message.root,
-                ft.Row([self.load_btn, self.adjust_btn], wrap=True, spacing=12),
-                self.load_message.root,
+                self.selection_message.root,
             ],
             icon=ft.Icons.TABLE_CHART,
         )
         self.columns_section.visible = False
-
-        # --- prévia
-        self.preview_holder = ft.Column(tight=True, spacing=12)
-        self.preview_section = section("Prévia do dataset", [self.preview_holder], icon=ft.Icons.TABLE_CHART_OUTLINED)
-        self.preview_section.visible = False
 
         # --- divisão
         self.train_pct = number_field("Treinamento (%)", "70", width=150, on_change=self._on_pct_change)
         self.val_pct = number_field("Validação (%)", "15", width=150, on_change=self._on_pct_change)
         self.test_pct = number_field("Teste (%)", "15", width=150, on_change=self._on_pct_change)
         self.split_seed = number_field("Semente da divisão", "42", integer=True, width=180,
-                                       helper="Em branco = aleatória", hint="aleatória")
+                                       helper="Em branco = aleatória", hint="aleatória",
+                                       on_change=lambda _e: self._changed())
         self.pct_total = ft.Text("", weight=ft.FontWeight.W_600)
-        self.split_btn = ft.FilledButton("Dividir dataset", icon=ft.Icons.CALL_SPLIT, on_click=self._on_split)
-        self.split_message = Message()
-        self.split_result = ft.ResponsiveRow(spacing=12, run_spacing=12)
-        self.split_insight = ft.Container()
-        self.split_hint = ft.Row(
-            [ft.Icon(ft.Icons.INFO_OUTLINE, color=C.ON_SURFACE_VARIANT, size=20),
-             body("Disponível depois de “Carregar dataset” (passo 2).")],
-            spacing=8,
-        )
 
         # --- normalização
         self.norm_group = ft.RadioGroup(
             value="none",
-            on_change=self._on_norm_change,
+            on_change=lambda _e: self._changed(),
             content=ft.Column(
                 [ft.Radio(value="none", label=NORMALIZATION_LABELS[None]),
                  ft.Radio(value="minmax", label=NORMALIZATION_LABELS["minmax"]),
@@ -96,15 +99,26 @@ class DataView:
                 tight=True,
             ),
         )
-        self.norm_message = Message()
+
+        # --- aplicar à rede
+        self.apply_btn = ft.FilledButton("Aplicar dados à rede", icon=ft.Icons.DATASET, on_click=self._on_apply)
+        self.next_btn = ft.OutlinedButton("Próximo: Arquitetura", icon=ft.Icons.ARROW_FORWARD,
+                                          on_click=lambda _e: self.ctx.navigate(1))
+        self.apply_message = Message()
+
+        # --- resultado
+        self.result_holder = ft.Column(tight=True, spacing=12)
+        self.result_section = section("Dados aplicados à rede", [self.result_holder],
+                                      icon=ft.Icons.TABLE_CHART_OUTLINED)
+        self.result_section.visible = False
 
         left = ft.Column(
             [
-                section("1. Arquivo", [ft.Row([self.pick_btn], wrap=True), self.path_text, self.file_message.root,
-                                       self.model_note.root],
-                        icon=ft.Icons.FOLDER_OPEN),
+                section("1. Tipo de tarefa", [self.task, body(HELP["task"]), self.task_message.root],
+                        icon=ft.Icons.TUNE),
+                section("2. Arquivo CSV", [ft.Row([self.pick_btn], wrap=True), self.path_text,
+                                           self.file_message.root], icon=ft.Icons.FOLDER_OPEN),
                 self.columns_section,
-                self.preview_section,
             ],
             spacing=16,
             col={"xs": 12, "lg": 6},
@@ -112,25 +126,27 @@ class DataView:
         right = ft.Column(
             [
                 section(
-                    "3. Divisão do dataset",
+                    "4. Divisão do dataset",
                     [
-                        self.split_hint,
                         ft.Row([self.train_pct, self.val_pct, self.test_pct], wrap=True, spacing=12),
                         self.pct_total,
                         ft.Row([self.split_seed], wrap=True),
-                        ft.Row([self.split_btn], wrap=True),
-                        self.split_message.root,
-                        self.split_result,
-                        self.split_insight,
                         learn_more("Para que serve cada subconjunto?", HELP["split"]),
                     ],
                     icon=ft.Icons.CALL_SPLIT,
                 ),
                 section(
-                    "4. Normalização das entradas (opcional)",
-                    [self.norm_group, self.norm_message.root, body(HELP["normalization"])],
+                    "5. Normalização das entradas (opcional)",
+                    [self.norm_group, body(HELP["normalization"])],
                     icon=ft.Icons.TUNE,
                 ),
+                section(
+                    "6. Aplicar à rede",
+                    [body(HELP["apply_data"]), ft.Row([self.next_btn, self.apply_btn], wrap=True, spacing=12),
+                     self.apply_message.root],
+                    icon=ft.Icons.DATASET,
+                ),
+                self.result_section,
             ],
             spacing=16,
             col={"xs": 12, "lg": 6},
@@ -138,6 +154,17 @@ class DataView:
         self.root = ft.ResponsiveRow([left, right], spacing=16, run_spacing=16)
         self._on_pct_change(None)
         self.refresh()
+
+    # ------------------------------------------------------------------ tarefa
+    def _selected_task(self) -> str:
+        return (self.task.selected or ["regression"])[0]
+
+    def _on_task_change(self, _e) -> None:
+        state = self.ctx.state
+        state.task_choice = self._selected_task()
+        self._sync_selection()
+        self._changed(notify=False)
+        state.notify()
 
     # ------------------------------------------------------------------ arquivo
     async def _on_pick(self, _e) -> None:
@@ -173,25 +200,16 @@ class DataView:
         self.file_message.show("success", f"{len(columns)} colunas encontradas",
                                f"Arquivo: {os.path.basename(path)}. Defina abaixo o papel de cada coluna.")
         self._default_roles(columns)
-        self.load_message.clear()
-        self.preview_section.visible = False
         self.columns_section.visible = True
         self._render_columns()
+        self._sync_selection()
+        self._changed(notify=False)
         state.notify()
 
     # ------------------------------------------------------------------ colunas
     def _default_roles(self, columns: list[str]) -> None:
-        """Convenção comum: última coluna = saída; demais = entradas.
-
-        Se a rede já existe, tenta respeitar o nº de entradas/saídas dela.
-        """
-        state = self.ctx.state
-        n_out = 1
-        if state.has_network and state.task == "regression" and state.n_outputs:
-            n_out = min(state.n_outputs, max(1, len(columns) - 1))
-        self._roles = {}
-        for i, col in enumerate(columns):
-            self._roles[col] = ROLE_OUTPUT if i >= len(columns) - n_out else ROLE_INPUT
+        """Convenção comum: última coluna = saída (ou rótulo); demais = entradas."""
+        self._roles = {col: (ROLE_OUTPUT if i == len(columns) - 1 else ROLE_INPUT) for i, col in enumerate(columns)}
 
     def _render_columns(self) -> None:
         rows = []
@@ -213,76 +231,155 @@ class DataView:
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ))
         self.columns_list.controls = rows
-        self._update_compat()
 
     def _on_role_change(self, col: str, selected: list[str]) -> None:
         self._roles[col] = (selected or [ROLE_IGNORE])[0]
-        self._update_compat()
+        self._sync_selection()
+        self._changed(notify=False)
+        self.ctx.state.notify()
 
     def _selected(self) -> tuple[list[str], list[str]]:
         cols = self.ctx.state.columns
         return ([c for c in cols if self._roles.get(c) == ROLE_INPUT],
                 [c for c in cols if self._roles.get(c) == ROLE_OUTPUT])
 
-    def _update_compat(self) -> None:
+    def _sync_selection(self) -> None:
+        """Leva a seleção para o estado e conta as classes (classificação)."""
         state = self.ctx.state
         ins, outs = self._selected()
+        state.input_cols, state.output_cols = ins, outs
+        labels: list[str] = []
+        if state.task_choice == "classification" and state.csv_path and len(outs) == 1:
+            labels = distinct_values(state.csv_path, outs[0]) or []
+        state.class_labels_preview = labels
+        self._update_selection_message()
+
+    def _update_selection_message(self) -> None:
+        state = self.ctx.state
+        ins, outs = state.input_cols, state.output_cols
         self.role_counts.value = f"Entradas: {len(ins)} · Saídas: {len(outs)}"
-        self.adjust_btn.visible = False
-        if not ins or not outs:
-            self.compat_message.show("warning", "Seleção incompleta",
-                                     "Marque ao menos uma coluna de entrada e uma de saída.")
-            return
-        if not state.has_network:
-            self.compat_message.show("info", "Crie a rede primeiro",
-                                     f"Com esta seleção, a rede precisa de {len(ins)} entrada(s). "
-                                     "Use o botão abaixo para levar esses números à aba Arquitetura.")
-            self.adjust_btn.visible = state.task == "regression"
-            return
-        if state.task == "classification":
-            if len(outs) != 1:
-                self.compat_message.show("warning", "Classificação usa 1 coluna de rótulo",
-                                         "Marque exatamente uma coluna de saída (a classe).")
-                return
-            problems = [] if len(ins) == state.n_inputs else [
-                f"a rede tem {state.n_inputs} entrada(s), a seleção tem {len(ins)}"]
-            if problems:
-                self.compat_message.show("error", "Incompatível com a rede", "; ".join(problems).capitalize() + ".")
-            else:
-                self.compat_message.show("info", "Entradas compatíveis",
-                                         "Os neurônios de saída serão conferidos com o nº de classes ao carregar "
-                                         "(binária: 1; multiclasse: 1 por classe).")
-            return
-        problems = []
-        if len(ins) != state.n_inputs:
-            problems.append(f"a rede tem {state.n_inputs} entrada(s), a seleção tem {len(ins)}")
-        if len(outs) != state.n_outputs:
-            problems.append(f"a rede tem {state.n_outputs} saída(s), a seleção tem {len(outs)}")
-        if problems:
-            self.compat_message.show("error", "Incompatível com a rede", "; ".join(problems).capitalize() + ".")
-            self.adjust_btn.visible = True
-        else:
-            self.compat_message.show("success", "Compatível com a rede",
-                                     f"{len(ins)} entrada(s) e {len(outs)} saída(s), como na arquitetura atual.")
-
-    def _on_adjust(self, _e) -> None:
-        ins, outs = self._selected()
-        self.ctx.adjust_architecture(len(ins), len(outs))
-
-    async def _on_load(self, _e) -> None:
-        state = self.ctx.state
-        ins, outs = self._selected()
         if not state.csv_path:
+            self.selection_message.clear()
             return
-        self.load_btn.disabled = True
+        if not ins or not outs:
+            self.selection_message.show("warning", "Seleção incompleta",
+                                        "Marque ao menos uma coluna de entrada e uma de saída.")
+            return
+        if state.task_choice == "classification":
+            labels = state.class_labels_preview
+            if len(outs) != 1:
+                self.selection_message.show("warning", "Classificação usa 1 coluna de rótulo",
+                                            "Marque exatamente uma coluna de saída: a que contém a classe.")
+                return
+            if len(labels) > MAX_CLASSES:
+                self.selection_message.show("error", f"A coluna “{outs[0]}” parece contínua",
+                                            f"Ela tem mais de {MAX_CLASSES} valores diferentes. Para prever "
+                                            "valores contínuos, escolha a tarefa Regressão.")
+                return
+            if len(labels) < 2:
+                self.selection_message.show("error", "Rótulo com menos de 2 classes",
+                                            f"A coluna “{outs[0]}” precisa ter ao menos 2 valores diferentes.")
+                return
+            shown = ", ".join(labels[:8]) + ("…" if len(labels) > 8 else "")
+            n_out = 1 if len(labels) == 2 else len(labels)
+            how = "1 neurônio de saída (0/1)" if n_out == 1 else f"{n_out} neurônios de saída (one-hot)"
+            self.selection_message.show("success", f"A rede precisa de {len(ins)} entrada(s) e {how}",
+                                        f"{len(labels)} classes em “{outs[0]}”: {shown}. "
+                                        "A aba Arquitetura usa esses números no modo Automático.")
+        else:
+            self.selection_message.show("success",
+                                        f"A rede precisa de {len(ins)} entrada(s) e {len(outs)} neurônio(s) de saída",
+                                        "A aba Arquitetura usa esses números no modo Automático.")
+        suggestion = state.suggested_io()
+        if state.has_network and suggestion and suggestion != (state.n_inputs, state.n_outputs):
+            self.selection_message.show(
+                "error", "Diferente da rede atual",
+                f"Os dados pedem {suggestion[0]} entrada(s) e {suggestion[1]} saída(s); a rede atual tem "
+                f"{state.n_inputs} e {state.n_outputs}. Recrie a rede na aba Arquitetura (modo Automático).")
+
+    # ---------------------------------------------------------- alterações
+    def _changed(self, *, notify: bool = True) -> None:
+        """Alguma escolha mudou depois de os dados terem sido aplicados à rede."""
+        state = self.ctx.state
+        if (state.has_dataset or state.has_split) and not state.data_dirty:
+            state.mark_data_dirty()
+            if notify:
+                state.notify()
+
+    def _read_pcts(self, *, strict: bool) -> tuple[float, float, float] | None:
+        values = []
+        for tf, name in ((self.train_pct, "Treinamento"), (self.val_pct, "Validação"), (self.test_pct, "Teste")):
+            try:
+                values.append(parse_float(tf.value, field=name, minimum=0, maximum=100))
+                tf.error = None
+            except ParseError as err:
+                if strict:
+                    tf.error = str(err)
+                return None
+        return values[0], values[1], values[2]  # type: ignore[return-value]
+
+    def _on_pct_change(self, e) -> None:
+        pcts = self._read_pcts(strict=False)
+        if pcts is None:
+            self.pct_total.value = "Total: —"
+            self.pct_total.color = C.ON_SURFACE_VARIANT
+        else:
+            total = sum(pcts)
+            ok = abs(total - 100) < 1e-9
+            self.pct_total.value = f"Total: {format_percent(total)} " + ("✓ soma 100%" if ok else "✗ precisa somar 100%")
+            self.pct_total.color = SUCCESS if ok else C.ERROR
+        if e is not None:
+            self._changed()
+
+    # ------------------------------------------------------------- aplicar
+    def _apply_problem(self) -> str | None:
+        state = self.ctx.state
+        if not state.has_network:
+            return "Crie a rede na aba Arquitetura: os dados são aplicados junto."
+        if not state.data_selection_ready:
+            return "Escolha o CSV e marque as colunas de entrada e de saída."
+        if state.task_choice != state.task:
+            return (f"A rede atual é de {TASK_LABELS[state.task]}, mas a tarefa escolhida é "
+                    f"{TASK_LABELS[state.task_choice]}. Recrie a rede na aba Arquitetura.")
+        return None
+
+    async def prepare(self) -> tuple[bool, str | None]:
+        """Carrega, divide e normaliza os dados escolhidos (``ctx.prepare_data``)."""
+        state = self.ctx.state
+        problem = self._apply_problem()
+        if problem:
+            self.apply_message.show("error", "Não foi possível aplicar os dados", problem)
+            return False, problem
+        pcts = self._read_pcts(strict=True)
+        if pcts is None or abs(sum(pcts) - 100) > 1e-9:
+            problem = "Os percentuais da divisão precisam ser números que somam 100%."
+            self.apply_message.show("error", "Divisão inválida", problem)
+            return False, problem
+        try:
+            seed = parse_int(self.split_seed.value, field="Semente", minimum=0, allow_empty=True)
+            self.split_seed.error = None
+        except ParseError as err:
+            self.split_seed.error = str(err)
+            self.apply_message.show("error", "Semente inválida", str(err))
+            return False, str(err)
+        kind = None if self.norm_group.value == "none" else self.norm_group.value
+        ins, outs = state.input_cols, state.output_cols
+
+        self.apply_btn.disabled = True
         self.ctx.update()
         try:
             info = await self.ctx.gateway.call("load_dataset", state.csv_path, ins, outs)
+            sizes = await self.ctx.gateway.call("split_dataset", pcts[0], pcts[1], pcts[2], seed=seed)
+            await self.ctx.gateway.call("set_normalization", kind)
         except GatewayError as err:
-            self.load_message.show("error", err.title, err.message)
-            return
+            state.clear_data()  # nada aplicado: treinar/avaliar ficam bloqueados
+            self.apply_message.show("error", err.title, err.message)
+            self._render_result()
+            state.notify()
+            return False, f"{err.title}: {err.message}"
         finally:
-            self.load_btn.disabled = False
+            self.apply_btn.disabled = False
+
         info = dict(info or {})
         info.setdefault("inputs", ins)
         info.setdefault("outputs", outs)
@@ -291,23 +388,41 @@ class DataView:
             labels = self.ctx.gateway.read_meta().get("class_labels")
             if labels:
                 info["classes"] = [str(c) for c in labels]
-        state.input_cols, state.output_cols = ins, outs
         state.on_dataset_loaded(info)
-        self.norm_group.value = "none"
+        state.on_split(dict(sizes or {}))
+        state.normalization = kind
         rows = info.get("rows")
-        self.load_message.show("success", "Dataset carregado e compatível com a rede",
-                               f"{format_number(rows) if isinstance(rows, int) else rows} linhas. "
-                               "Próximo passo: dividir o dataset (ao lado).")
-        self._render_preview(info)
+        self.apply_message.show(
+            "success", "Dados aplicados à rede",
+            f"{format_number(rows) if isinstance(rows, int) else rows} linhas · treinamento "
+            f"{state.split_size('train')} · validação {state.split_size('val')} · teste "
+            f"{state.split_size('test')} · normalização {NORMALIZATION_SHORT[kind]}.")
+        self._render_result()
         state.notify()
+        return True, None
 
-    def _render_preview(self, info: dict) -> None:
+    async def _on_apply(self, _e) -> None:
+        await self.prepare()
+
+    def _render_result(self) -> None:
+        state = self.ctx.state
+        info = state.dataset
+        if not info:
+            self.result_holder.controls = []
+            self.result_section.visible = False
+            return
         cols = [*info.get("inputs", []), *info.get("outputs", [])]
         preview = info.get("preview") or []
-        tiles = [metric("Linhas", format_number(info.get("rows")) if isinstance(info.get("rows"), int) else "—"),
-                 metric("Entradas", str(len(info.get("inputs", [])))),
-                 metric("Saídas", str(len(info.get("outputs", []))))]
+        tiles = [metric("Linhas", format_number(info.get("rows")) if isinstance(info.get("rows"), int) else "—",
+                        col={"xs": 6, "md": 3})]
+        for key in ("train", "val", "test"):
+            n = state.split_size(key)
+            tiles.append(metric(SUBSET_LABELS[key], format_number(n) if n is not None else "—", hint="amostras",
+                                col={"xs": 6, "md": 3}))
         controls: list[ft.Control] = [ft.ResponsiveRow(tiles, spacing=12, run_spacing=12)]
+        insight = samples_per_parameter(state.split_size("train"), state.n_params)
+        if insight:
+            controls.append(insight_box(insight))
         if info.get("classes"):
             classes = [str(c) for c in info["classes"]]
             controls.append(body(f"Classes ({len(classes)}): " + ", ".join(classes), muted=False))
@@ -328,131 +443,53 @@ class DataView:
             )
             controls.append(body(f"Primeiras {len(data_rows)} linhas:"))
             controls.append(ft.Row([table], scroll=ft.ScrollMode.AUTO))
-        self.preview_holder.controls = controls
-        self.preview_section.visible = True
+        self.result_holder.controls = controls
+        self.result_section.visible = True
 
-    # ------------------------------------------------------------------ divisão
-    def _read_pcts(self, *, strict: bool) -> tuple[float, float, float] | None:
-        values = []
-        for tf, name in ((self.train_pct, "Treinamento"), (self.val_pct, "Validação"), (self.test_pct, "Teste")):
-            try:
-                values.append(parse_float(tf.value, field=name, minimum=0, maximum=100))
-                tf.error = None
-            except ParseError as err:
-                if strict:
-                    tf.error = str(err)
-                return None
-        return values[0], values[1], values[2]  # type: ignore[return-value]
-
-    def _on_pct_change(self, _e) -> None:
-        pcts = self._read_pcts(strict=False)
-        if pcts is None:
-            self.pct_total.value = "Total: —"
-            self.pct_total.color = C.ON_SURFACE_VARIANT
-            return
-        total = sum(pcts)
-        ok = abs(total - 100) < 1e-9
-        self.pct_total.value = f"Total: {format_percent(total)} " + ("✓ soma 100%" if ok else "✗ precisa somar 100%")
-        self.pct_total.color = SUCCESS if ok else C.ERROR
-
-    async def _on_split(self, _e) -> None:
+    # ------------------------------------------------------------- modelo base
+    def apply_template(self, info) -> None:
+        """Usa a configuração de um modelo salvo como base (tarefa, colunas, normalização)."""
         state = self.ctx.state
-        pcts = self._read_pcts(strict=True)
-        if pcts is None:
-            self.split_message.show("error", "Percentuais inválidos", "Corrija os campos destacados.")
-            return
-        if abs(sum(pcts) - 100) > 1e-9:
-            self.split_message.show("error", "Os percentuais precisam somar 100%",
-                                    f"Soma atual: {format_percent(sum(pcts))}.")
-            return
-        try:
-            seed = parse_int(self.split_seed.value, field="Semente", minimum=0, allow_empty=True)
-            self.split_seed.error = None
-        except ParseError as err:
-            self.split_seed.error = str(err)
-            return
-        self.split_btn.disabled = True
-        self.ctx.update()
-        try:
-            sizes = await self.ctx.gateway.call("split_dataset", pcts[0], pcts[1], pcts[2], seed=seed)
-            state.on_split(dict(sizes or {}))
-            kind = None if self.norm_group.value == "none" else self.norm_group.value
-            if kind:  # reaplica a normalização escolhida sobre a nova divisão
-                await self.ctx.gateway.call("set_normalization", kind)
-            state.normalization = kind
-        except GatewayError as err:
-            self.split_message.show("error", err.title, err.message)
-            return
-        finally:
-            self.split_btn.disabled = False
-        self.split_message.show("success", "Dataset dividido",
-                                "Normalização: " + NORMALIZATION_SHORT[state.normalization] +
-                                ". Próximo passo: aba Treinamento.")
-        self._render_split()
-        state.notify()
-
-    def _render_split(self) -> None:
-        state = self.ctx.state
-        tiles = []
-        for key in ("train", "val", "test"):
-            n = state.split_size(key)
-            tiles.append(metric(SUBSET_LABELS[key], format_number(n) if n is not None else "—",
-                                hint="amostras", col={"xs": 4}))
-        self.split_result.controls = tiles
-        insight = samples_per_parameter(state.split_size("train"), state.n_params)
-        self.split_insight.content = insight_box(insight) if insight else None
-
-    async def _on_norm_change(self, _e) -> None:
-        state = self.ctx.state
-        kind = None if self.norm_group.value == "none" else self.norm_group.value
-        if not state.has_split:
-            self.norm_message.show("info", "Será aplicada ao dividir",
-                                   "A normalização usa parâmetros do subconjunto de treinamento, "
-                                   "então é aplicada logo após a divisão.")
-            return
-        try:
-            await self.ctx.gateway.call("set_normalization", kind)
-        except GatewayError as err:
-            self.norm_message.show("error", err.title, err.message)
-            self.norm_group.value = "none" if state.normalization is None else state.normalization
-            return
-        state.normalization = kind
-        self.norm_message.show("success", "Normalização aplicada",
-                               f"{NORMALIZATION_SHORT[kind]} (parâmetros calculados no treinamento).")
-        state.notify()
+        state.task_choice = info.task
+        self.task.selected = [info.task]
+        self.norm_group.value = info.normalization or "none"
+        ins = list(info.meta.get("input_cols") or [])
+        outs = list(info.meta.get("output_cols") or [])
+        if state.columns and ins and outs and set(ins + outs) <= set(state.columns):
+            self._roles = {c: ROLE_INPUT if c in ins else ROLE_OUTPUT if c in outs else ROLE_IGNORE
+                           for c in state.columns}
+            self._render_columns()
+        self._sync_selection()
 
     # ------------------------------------------------------------------ estado
     def refresh(self) -> None:
         state = self.ctx.state
         busy = state.training
-        self.pick_btn.disabled = busy
-        self.load_btn.disabled = busy or not state.csv_path
-        self.split_btn.disabled = busy or not state.has_dataset
-        self.norm_group.disabled = busy or not state.has_dataset
-        self.split_hint.visible = not state.has_dataset
-        if state.model_origin == "loaded" and state.loaded_normalization:
-            kind = NORMALIZATION_SHORT[state.loaded_normalization]
-            self.model_note.show(
-                "warning", f"O modelo aberto foi treinado com normalização {kind}",
-                "Ao carregar um dataset, o backend descarta a normalização salva e a recalcula a partir "
-                f"do novo subconjunto de treinamento (isso vale também para as previsões). Escolha {kind} "
-                "no passo 4 para avaliar o modelo em condições equivalentes.")
+        for control in (self.pick_btn, self.task, self.norm_group, self.train_pct, self.val_pct, self.test_pct,
+                        self.split_seed):
+            control.disabled = busy
+        self.apply_btn.disabled = busy or self._apply_problem() is not None
+        self.apply_btn.visible = state.has_network
+        self.next_btn.visible = not state.has_network
+        if state.has_network and state.task != state.task_choice:
+            self.task_message.show("warning", "A tarefa mudou",
+                                   f"A rede atual é de {TASK_LABELS[state.task]}. Recrie a rede na aba "
+                                   "Arquitetura para usar a nova tarefa.")
         else:
-            self.model_note.clear()
+            self.task_message.clear()
+        if state.data_dirty:
+            if self.apply_message.level != "warning":
+                self.apply_message.show("warning", "Alterações ainda não aplicadas",
+                                        "Clique em “Aplicar dados à rede” para carregar e dividir de novo com "
+                                        "as novas escolhas. Até lá, treinar e avaliar ficam bloqueados.")
+        elif not state.has_dataset and self.apply_message.level in ("success", "warning"):
+            self.apply_message.clear()
         if state.columns and self.columns_section.visible:
-            self._update_compat()
+            self._update_selection_message()
         if not state.has_dataset:
-            self.preview_section.visible = False
-            if self.load_message.level == "success":  # ex.: a rede foi recriada
-                self.load_message.show("info", "Carregue o dataset novamente",
-                                       "A rede mudou: clique em “Carregar dataset” para conferir a compatibilidade.")
-        if not state.has_split:
-            self.split_result.controls = []
-            self.split_insight.content = None
-            if not state.has_dataset:
-                self.split_message.clear()
-                self.norm_message.clear()
-                self.norm_group.value = "none"
+            self.result_section.visible = False
+        elif not self.result_section.visible:
+            self._render_result()
 
 
 def preview_row_values(row, inputs: list[str], outputs: list[str], classes: list[str] | None = None) -> list:

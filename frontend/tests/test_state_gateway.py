@@ -111,3 +111,76 @@ def test_demo_service_respeita_contrato(tmp_path):
     svc.save(str(model))
     svc.load(str(model))
     assert svc.describe_network()["n_inputs"] == 2
+
+
+def test_suggested_io_regressao_e_classificacao():
+    s = AppState()
+    assert s.suggested_io() is None  # sem CSV
+    s.csv_path, s.input_cols, s.output_cols = "d.csv", ["a", "b", "c"], ["y"]
+    assert s.suggested_io() == (3, 1)
+    s.output_cols = ["y", "z"]
+    assert s.suggested_io() == (3, 2)
+    s.task_choice = "classification"
+    assert s.suggested_io() is None  # classificação exige 1 coluna de rótulo
+    s.output_cols = ["classe"]
+    s.class_labels_preview = ["a", "b"]
+    assert s.suggested_io() == (3, 1)  # binária: 1 neurônio
+    s.class_labels_preview = ["a", "b", "c", "d"]
+    assert s.suggested_io() == (3, 4)  # one-hot
+    s.class_labels_preview = ["a"]
+    assert s.suggested_io() is None
+
+
+def test_alterar_dados_aplicados_marca_como_desatualizado():
+    s = AppState()
+    s.mark_data_dirty()
+    assert not s.data_dirty  # nada aplicado ainda: não há o que desatualizar
+    s.on_network_created(DESC, "regression")
+    s.on_dataset_loaded({"rows": 10})
+    s.on_split({"train": 7, "val": 2, "test": 1})
+    assert s.data_ready
+    s.mark_data_dirty()
+    assert s.data_dirty and not s.data_ready
+    s.on_split({"train": 6, "val": 3, "test": 1})  # reaplicado
+    assert s.data_ready
+
+
+def test_dados_reaplicados_mantem_a_contagem_de_epocas():
+    s = AppState()
+    s.on_network_created(DESC, "regression")
+    s.trained_epochs = 10
+    s.on_dataset_loaded({"rows": 10})  # os pesos continuam na rede
+    assert s.trained_epochs == 10
+    s.on_network_created(DESC, "regression")  # pesos novos
+    assert s.trained_epochs == 0
+
+
+def test_forget_network_mantem_as_escolhas_de_dados():
+    s = AppState()
+    s.csv_path, s.input_cols, s.output_cols = "d.csv", ["a"], ["y"]
+    s.on_network_created(DESC, "regression")
+    s.forget_network()
+    assert not s.has_network and s.csv_path == "d.csv" and s.input_cols == ["a"]
+
+
+def test_distinct_values_conta_classes_como_o_backend(tmp_path):
+    from frontend.csv_utils import distinct_values
+
+    path = tmp_path / "c.csv"
+    path.write_text("x,classe\n1, b\n2,a\n3,b \n4,c\n", encoding="utf-8")
+    assert distinct_values(str(path), "classe") == ["a", "b", "c"]  # strip + ordem alfabética
+    assert distinct_values(str(path), "nao_existe") is None
+    assert distinct_values(str(tmp_path / "sumiu.csv"), "classe") is None
+    many = tmp_path / "m.csv"
+    many.write_text("y\n" + "\n".join(str(i) for i in range(50)), encoding="utf-8")
+    assert len(distinct_values(str(many), "y", limit=10)) == 11  # para de contar acima do limite
+
+
+def test_gateway_reset_cria_service_novo():
+    from frontend.demo_service import DemoService
+
+    gw = ServiceGateway(DemoService(), DemoBackendError, demo=True)
+    old = gw.service
+    gw.call_sync("create_network", 2, [{"neurons": 1, "activation": "linear"}])
+    gw.reset()
+    assert gw.service is not old and gw.service.network is None

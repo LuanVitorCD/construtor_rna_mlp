@@ -9,17 +9,30 @@ backend não existir, a interface abre em **modo demonstração**, com resultado
 
 ## Funcionalidades
 
-- **Arquitetura:** escolher a tarefa (regressão ou classificação), o nº de entradas, as camadas ocultas
-  (neurônios e função de ativação), a camada de saída e a semente. O diagrama da rede atualiza ao vivo.
-- **Dados:** carregar um CSV, marcar as colunas de entrada e de saída, conferir a compatibilidade com a
-  rede, dividir em treinamento/validação/teste e normalizar as entradas (Min-Max ou Z-score).
+Ao abrir, a aplicação pergunta como começar. Os dois modos têm um botão para voltar a esse menu.
+
+**Criar novo modelo**
+
+- **Dados:** escolher a tarefa (regressão ou classificação), carregar um CSV, marcar as colunas de entrada
+  e de saída, e definir a divisão treinamento/validação/teste e a normalização (Min-Max ou Z-score).
+  Na classificação, as classes do rótulo são contadas na hora.
+- **Arquitetura:** entradas e saídas no modo **automático** (vindas do CSV) ou **personalizado**, camadas
+  ocultas (neurônios e função de ativação), ativação da saída e semente. Ao criar a rede, os dados já
+  são carregados, divididos e normalizados; se algo não bater, o erro aparece na mesma tela.
 - **Treinamento:** definir épocas e taxa de aprendizagem (η) e acompanhar ao vivo a curva do MSE de
   treinamento e de validação. A tela marca a melhor época, avisa sobre sobreajuste e exporta o histórico em CSV.
 - **Avaliação:** MSE por subconjunto. Na classificação, também acurácia e matriz de confusão.
 - **Previsão:** calcular a saída da rede para novos valores de entrada.
-- **Modelos:** abrir e salvar redes em arquivo JSON.
-- **Acessibilidade:** tema claro e escuro com as cores das logos do curso e contraste WCAG AA, atalhos de
-  teclado, e mensagens com ícone e texto (não só cor).
+- **Salvar modelo** em JSON e **usar modelo como base**: preenche o formulário com a configuração de um
+  modelo salvo (tarefa, camadas, ativações, colunas e normalização), sem reaproveitar os pesos.
+
+**Usar modelo existente**
+
+- **Informações do modelo:** arquivo, tarefa, arquitetura (com diagrama), colunas e normalização.
+- **Previsão:** calcular a saída do modelo salvo para novos valores de entrada.
+
+**Acessibilidade:** tema claro e escuro com as cores das logos do curso e contraste WCAG AA, atalhos de
+teclado, e mensagens com ícone e texto (não só cor).
 
 ## Tecnologias Utilizadas
 

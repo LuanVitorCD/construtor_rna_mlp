@@ -213,8 +213,7 @@ class PredictionView:
             c.disabled = not ready
         if not state.has_network:
             self.status.value = ""
-            self.requirements.content = requirement_list([("Rede criada (aba Arquitetura) ou modelo aberto "
-                                                           "(botão “Abrir modelo” no topo)", False)])
+            self.requirements.content = requirement_list([("Rede criada (aba Arquitetura)", False)])
             return
         self.requirements.content = None
         origin = "Modelo carregado de arquivo" if state.model_origin == "loaded" else "Rede criada nesta sessão"

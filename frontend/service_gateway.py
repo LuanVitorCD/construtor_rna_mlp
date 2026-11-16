@@ -63,6 +63,11 @@ class ServiceGateway:
     async def call(self, method: str, *args: Any, **kwargs: Any) -> Any:
         return await asyncio.to_thread(self.call_sync, method, *args, **kwargs)
 
+    def reset(self) -> None:
+        """Começa do zero com um service novo (ao trocar de modo / voltar ao menu)."""
+        with self._lock:
+            self.service = type(self.service)()
+
     # Leituras somente-leitura de atributos públicos do MLPService que a fachada não devolve
     # (backend/service.py): rótulos das classes e nomes das colunas (`meta`) e a normalização
     # ativa (`norm_kind`). Se o atributo não existir, a UI segue com valores padrão.

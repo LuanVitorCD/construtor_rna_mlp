@@ -317,7 +317,7 @@ class TrainingView:
 
     def _can_train(self) -> bool:
         s = self.ctx.state
-        return s.has_network and s.has_dataset and s.has_split
+        return s.has_network and s.data_ready
 
     def refresh(self) -> None:
         state = self.ctx.state
@@ -336,9 +336,10 @@ class TrainingView:
         else:
             self.config_summary.value = "Para treinar, conclua as etapas abaixo:"
             self.requirements.content = requirement_list([
+                ("CSV e colunas escolhidos (aba Dados)", state.data_selection_ready),
                 ("Rede criada (aba Arquitetura)", state.has_network),
-                ("Dataset carregado (aba Dados)", state.has_dataset),
-                ("Dataset dividido em treino/validação/teste (aba Dados)", state.has_split),
+                ("Dados aplicados à rede (aba Dados)"
+                 + (" — há alterações não aplicadas" if state.data_dirty else ""), state.data_ready),
             ])
         if not state.training and not state.history:
             self.progress.value = 0

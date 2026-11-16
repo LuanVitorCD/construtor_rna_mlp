@@ -4,6 +4,9 @@ O estado *de verdade* (rede, pesos, dados) fica no backend. Aqui só fica o que 
 precisa para habilitar ou desabilitar ações e mostrar resumos. As regras de
 invalidação imitam as do ``MLPService``. Exemplo: recriar a rede descarta a divisão
 e o histórico.
+
+No modo "Criar novo modelo" a aba Dados vem primeiro: as escolhas de lá (tarefa, CSV,
+colunas) existem antes da rede e permitem preencher entradas/saídas automaticamente.
 """
 
 from __future__ import annotations
@@ -14,7 +17,8 @@ from typing import Callable
 
 @dataclass
 class AppState:
-    task: str = "regression"
+    mode: str | None = None  # "create" (Criar novo modelo) | "use" (Usar modelo existente)
+    task: str = "regression"  # tarefa da rede criada/carregada
     activations: list[str] = field(default_factory=lambda: ["linear", "sigmoid", "tanh", "relu"])
 
     # Arquitetura (describe_network + o que a UI enviou)
@@ -22,11 +26,16 @@ class AppState:
     model_origin: str | None = None  # "created" | "loaded"
     model_path: str | None = None
 
-    # Dados
+    # Escolhas da aba Dados (valem antes de a rede existir)
+    task_choice: str = "regression"
     csv_path: str | None = None
     columns: list[str] = field(default_factory=list)
-    input_cols: list[str] = field(default_factory=list)
+    input_cols: list[str] = field(default_factory=list)  # seleção atual
     output_cols: list[str] = field(default_factory=list)
+    class_labels_preview: list[str] = field(default_factory=list)  # classes contadas no CSV
+    data_dirty: bool = False  # escolhas mudaram depois de aplicadas à rede
+
+    # Dados aplicados à rede (backend)
     dataset: dict | None = None  # retorno de load_dataset
     split: dict | None = None  # retorno de split_dataset
     normalization: str | None = None
@@ -67,8 +76,29 @@ class AppState:
         return self.split is not None
 
     @property
+    def data_ready(self) -> bool:
+        """Dados carregados, divididos e atualizados com as escolhas da aba Dados."""
+        return self.has_split and not self.data_dirty
+
+    @property
     def is_trained(self) -> bool:
         return self.trained_epochs > 0 or self.model_origin == "loaded"
+
+    @property
+    def data_selection_ready(self) -> bool:
+        return bool(self.csv_path and self.input_cols and self.output_cols)
+
+    def suggested_io(self) -> tuple[int, int] | None:
+        """Entradas e neurônios de saída que o CSV escolhido pede (modo "Automático")."""
+        if not self.data_selection_ready:
+            return None
+        n_in = len(self.input_cols)
+        if self.task_choice == "classification":
+            k = len(self.class_labels_preview)
+            if len(self.output_cols) != 1 or k < 2:
+                return None
+            return n_in, (1 if k == 2 else k)  # binária: 0/1; multiclasse: one-hot
+        return n_in, len(self.output_cols)
 
     @property
     def n_inputs(self) -> int | None:
@@ -110,22 +140,30 @@ class AppState:
         if self.dataset and self.dataset.get("classes"):
             return [str(c) for c in self.dataset["classes"]]
         labels = self.loaded_meta.get("class_labels")
-        return [str(c) for c in labels] if labels else None
+        if labels:
+            return [str(c) for c in labels]
+        if self.task_choice == "classification" and self.class_labels_preview:
+            return list(self.class_labels_preview)
+        return None
 
-    def input_names(self) -> list[str]:
-        n = self.n_inputs or 0
-        names = (self.dataset or {}).get("inputs") or self.loaded_meta.get("input_cols") or []
-        if len(names) == n:
-            return [str(x) for x in names]
+    def input_names(self, n: int | None = None) -> list[str]:
+        n = self.n_inputs if n is None else n
+        n = n or 0
+        for names in ((self.dataset or {}).get("inputs"), self.loaded_meta.get("input_cols"), self.input_cols):
+            if names and len(names) == n:
+                return [str(x) for x in names]
         return [f"x{_subscript(i)}" for i in range(1, n + 1)]
 
-    def output_names(self) -> list[str]:
-        n = self.n_outputs or 0
-        if self.task == "classification" and self.class_labels and len(self.class_labels) == n:
-            return [f"Classe {c}" for c in self.class_labels]
-        names = (self.dataset or {}).get("outputs") or self.loaded_meta.get("output_cols") or []
-        if len(names) == n:
-            return [str(x) for x in names]
+    def output_names(self, n: int | None = None, task: str | None = None) -> list[str]:
+        n = self.n_outputs if n is None else n
+        n = n or 0
+        task = task or self.task
+        labels = self.class_labels
+        if task == "classification" and labels and len(labels) == n:
+            return [f"Classe {c}" for c in labels]
+        for names in ((self.dataset or {}).get("outputs"), self.loaded_meta.get("output_cols"), self.output_cols):
+            if names and len(names) == n:
+                return [str(x) for x in names]
         return [f"ŷ{_subscript(i)}" for i in range(1, n + 1)]
 
     def architecture_text(self) -> str:
@@ -142,8 +180,8 @@ class AppState:
         self.model_path = None
         self.loaded_meta = {}
         self.loaded_normalization = None
-        # O service reseta divisão/normalização/histórico; o dataset precisa
-        # ser recarregado para checar compatibilidade (e recodificar classes).
+        self.trained_epochs = 0  # pesos novos
+        # O service reseta dados/divisão/normalização/histórico ao criar a rede.
         self.dataset = None
         self._clear_after_dataset()
 
@@ -155,29 +193,49 @@ class AppState:
         self.dataset = None
         self._clear_after_dataset()
 
+    def forget_network(self) -> None:
+        """Volta ao estado "sem rede" (ex.: depois de usar um modelo só como base)."""
+        self.network = None
+        self.model_origin = None
+        self.model_path = None
+        self.trained_epochs = 0
+        self.dataset = None
+        self._clear_after_dataset()
+
     def on_csv_selected(self, path: str, columns: list[str]) -> None:
         self.csv_path = path
         self.columns = list(columns)
         self.input_cols, self.output_cols = [], []
-        self.dataset = None
-        self._clear_after_dataset()
+        self.class_labels_preview = []
+        self.mark_data_dirty()
+
+    def mark_data_dirty(self) -> None:
+        """Escolhas da aba Dados mudaram: os dados aplicados à rede ficaram desatualizados."""
+        if self.has_dataset or self.has_split:
+            self.data_dirty = True
 
     def on_dataset_loaded(self, info: dict) -> None:
         self.dataset = info
         self._clear_after_dataset()
 
+    def clear_data(self) -> None:
+        """Nenhum dado aplicado à rede (ex.: falha ao carregar/dividir)."""
+        self.dataset = None
+        self._clear_after_dataset()
+
     def on_split(self, sizes: dict) -> None:
         self.split = sizes
         self.history = []
-        self.trained_epochs = 0 if self.model_origin != "loaded" else self.trained_epochs
         self.evaluations = {}
+        self.data_dirty = False
 
     def _clear_after_dataset(self) -> None:
+        # Os pesos continuam na rede: trained_epochs não é zerado aqui.
         self.split = None
         self.normalization = None
         self.history = []
-        self.trained_epochs = 0
         self.evaluations = {}
+        self.data_dirty = False
 
     def split_size(self, subset: str) -> int | None:
         if not self.split:
