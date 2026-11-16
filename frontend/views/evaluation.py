@@ -20,7 +20,7 @@ from frontend.components.ui import (
     requirement_list,
     section,
 )
-from frontend.context import AppContext
+from frontend.context import AppContext, updates_page
 from frontend.parsing import format_number, format_percent
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP, SUBSET_LABELS
@@ -111,6 +111,7 @@ class EvaluationView:
         self.ctx.state.evaluations[subset] = result
         return result
 
+    @updates_page
     async def _on_evaluate(self, _e) -> None:
         subset = self._selected_subset()
         self._set_busy(True)
@@ -125,6 +126,7 @@ class EvaluationView:
                           f"MSE = {format_number(result.get('mse'))}")
         self._render()
 
+    @updates_page
     async def _on_evaluate_all(self, _e) -> None:
         self._set_busy(True)
         try:

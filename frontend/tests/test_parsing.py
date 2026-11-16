@@ -68,6 +68,9 @@ def test_format_number_padrao_brasileiro():
     assert format_number(1234567) == "1.234.567"
     assert format_number(-0.5) == "−0,5"
     assert format_number(1.5e-7) == "1,5e−7"
+    assert format_number(12430.4) == "12.430"  # grandes: milhar, não notação científica
+    assert format_number(-30000.0, 3) == "−30.000"
+    assert format_number(2500.0, 3) == "2.500" and format_number(250.0, 3) == "250"
     assert format_number(None) == "—"
     assert format_number(float("nan")) == "NaN"
     assert format_percent(12.345) == "12,3%"

@@ -8,7 +8,7 @@ import flet as ft
 
 from frontend.components.network_diagram import NetworkDiagram
 from frontend.components.ui import architecture_table, body, metric, section
-from frontend.context import AppContext
+from frontend.context import AppContext, updates_page
 from frontend.parsing import format_number
 from frontend.texts import NORMALIZATION_SHORT, TASK_LABELS
 
@@ -50,6 +50,7 @@ class ModelInfoView:
         self.root = ft.ResponsiveRow([left, right], spacing=16, run_spacing=16)
         self.refresh()
 
+    @updates_page
     async def _on_open(self, _e) -> None:
         await self.ctx.open_model()
 

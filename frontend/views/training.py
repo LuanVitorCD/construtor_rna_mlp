@@ -28,7 +28,7 @@ from frontend.components.ui import (
     requirement_list,
     section,
 )
-from frontend.context import AppContext
+from frontend.context import AppContext, updates_page
 from frontend.parsing import ParseError, format_number, parse_float, parse_int
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP, NORMALIZATION_SHORT
@@ -124,6 +124,7 @@ class TrainingView:
         self._finished.set()
 
     # ------------------------------------------------------------------- ações
+    @updates_page
     async def _on_start(self, _e) -> None:
         state = self.ctx.state
         if state.training or not self._can_train():
@@ -234,6 +235,7 @@ class TrainingView:
     def _on_log_toggle(self, e) -> None:
         self.chart.set_log_scale(bool(e.control.value))
 
+    @updates_page
     async def _on_export(self, _e) -> None:
         history = self.ctx.state.history
         if not history:

@@ -17,7 +17,7 @@ import flet as ft
 
 from frontend import theme
 from frontend.components.ui import LEVELS, heading, level_icon_color
-from frontend.context import AppContext
+from frontend.context import AppContext, updates_page
 from frontend.model_files import apply_loaded_model, read_model
 from frontend.service_gateway import GatewayError, create_gateway
 from frontend.state import AppState
@@ -102,15 +102,25 @@ class Workspace:
             ],
             on_change=lambda e: self.navigate(int(e.control.selected_index)),
         )
-        self.content = ft.Container(content=self.pages[0], expand=True,
+        # Todas as abas ficam montadas; a navegação só alterna `visible`. Trocar o conteúdo
+        # (desanexar/reanexar a mesma árvore de controles) fazia o diff do Flet duplicar
+        # itens de listas, como as duas "Rede atual" na aba Arquitetura.
+        for i, page_control in enumerate(self.pages):
+            page_control.visible = i == 0
+        self.content = ft.Container(content=ft.Column(self.pages, expand=True, spacing=0), expand=True,
                                     padding=ft.Padding.only(left=28, right=20, top=16))
         self.root = ft.Row([self.rail, ft.VerticalDivider(width=1, color=C.OUTLINE_VARIANT), self.content],
                            expand=True, spacing=0, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
 
+    @property
+    def current(self) -> int:
+        return int(self.rail.selected_index or 0)
+
     def navigate(self, index: int) -> None:
         index = max(0, min(index, len(self.pages) - 1))
         self.rail.selected_index = index
-        self.content.content = self.pages[index]
+        for i, page_control in enumerate(self.pages):
+            page_control.visible = i == index
         self.page.update()
 
     def refresh(self, state: AppState) -> None:
@@ -213,6 +223,7 @@ class AppShell:
         if update:
             self.page.update()
 
+    @updates_page
     async def start_create(self, _e=None) -> None:
         self.ctx.gateway.reset()
         self._new_state("create")
@@ -227,6 +238,7 @@ class AppShell:
         self.refresh()
         self.page.update()
 
+    @updates_page
     async def start_use(self, _e=None, path: str | None = None) -> None:
         path = path or await self._pick_json("Abrir modelo salvo (JSON)")
         if not path:
@@ -247,6 +259,7 @@ class AppShell:
         self.page.update()
         self.toast("success", f"Modelo aberto: {os.path.basename(path)} ({state.architecture_text()}).")
 
+    @updates_page
     async def _on_back_to_menu(self, _e=None) -> None:
         state = self.ctx.state
         if self.workspace is None:
@@ -412,6 +425,7 @@ class AppShell:
             return None
         return files[0].path
 
+    @updates_page
     async def _on_open_other_model(self, _e=None) -> None:
         """Modo "Usar modelo existente": troca o modelo aberto."""
         state = self.ctx.state
@@ -430,6 +444,7 @@ class AppShell:
         self.navigate(0)
         self.toast("success", f"Modelo aberto: {os.path.basename(path)} ({state.architecture_text()}).")
 
+    @updates_page
     async def _on_use_template(self, _e=None) -> None:
         """Modo "Criar novo modelo": preenche o formulário com a configuração de um modelo salvo."""
         state = self.ctx.state
@@ -456,6 +471,7 @@ class AppShell:
         self.navigate(1)
         self.toast("info", f"Configuração de {os.path.basename(path)} aplicada. Confira e clique em “Criar rede”.")
 
+    @updates_page
     async def _on_save_model(self, _e=None) -> None:
         state = self.ctx.state
         if state.mode != "create" or state.training or not state.has_network:

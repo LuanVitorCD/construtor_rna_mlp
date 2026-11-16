@@ -22,7 +22,7 @@ from frontend.components.ui import (
     number_field,
     section,
 )
-from frontend.context import AppContext
+from frontend.context import AppContext, updates_page
 from frontend.csv_utils import MAX_CLASSES, distinct_values
 from frontend.parsing import ParseError, format_number, format_percent, parse_float, parse_int
 from frontend.service_gateway import GatewayError
@@ -167,6 +167,7 @@ class DataView:
         state.notify()
 
     # ------------------------------------------------------------------ arquivo
+    @updates_page
     async def _on_pick(self, _e) -> None:
         try:
             files = await self.ctx.file_picker.pick_files(
@@ -186,6 +187,7 @@ class DataView:
             return
         await self.open_csv(path)
 
+    @updates_page
     async def open_csv(self, path: str) -> None:
         state = self.ctx.state
         try:
@@ -401,6 +403,7 @@ class DataView:
         state.notify()
         return True, None
 
+    @updates_page
     async def _on_apply(self, _e) -> None:
         await self.prepare()
 

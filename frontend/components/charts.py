@@ -26,7 +26,11 @@ _SUPERSCRIPT = str.maketrans("-0123456789", "⁻⁰¹²³⁴⁵⁶⁷⁸⁹")
 
 
 def nice_ticks(lo: float, hi: float, target: int = 5) -> list[float]:
-    """Marcas "redondas" (1, 2, 2,5 ou 5 × 10^k) cobrindo [lo, hi]."""
+    """Marcas "redondas" (1, 2, 2,5 ou 5 × 10^k) cobrindo [lo, hi].
+
+    A primeira marca é ≤ lo e a última é ≥ hi. Elas viram os limites do eixo, então a
+    curva nunca passa da borda do gráfico.
+    """
     if not (math.isfinite(lo) and math.isfinite(hi)):
         return []
     if hi <= lo:
@@ -35,11 +39,10 @@ def nice_ticks(lo: float, hi: float, target: int = 5) -> list[float]:
     mag = 10 ** math.floor(math.log10(raw))
     step = next(m * mag for m in (1, 2, 2.5, 5, 10) if m * mag >= raw)
     first = math.floor(lo / step) * step
-    ticks, v = [], first
-    while v <= hi + step * 1e-9:
-        ticks.append(round(v, 12))
-        v += step
-    return ticks
+    last = math.ceil(hi / step - 1e-9) * step  # tolera erro de ponto flutuante (ex.: 10/2 = 5,0000001)
+    count = int(round((last - first) / step))
+    # 12 algarismos significativos: tira o ruído de ponto flutuante sem juntar marcas de valores minúsculos
+    return [float(f"{first + k * step:.12g}") for k in range(count + 1)]
 
 
 def _axis_label(value: float, text: str) -> fch.ChartAxisLabel:
@@ -188,7 +191,7 @@ class LossChart:
             title=ft.Text(title, size=13, color=C.ON_SURFACE), title_size=22, labels=labels, label_size=56)
 
         max_x = max(total_epochs, rows[-1]["epoch"], 2)
-        x_ticks = [t for t in nice_ticks(0, max_x, 8) if t >= 1] or [1]
+        x_ticks = [t for t in nice_ticks(0, max_x, 8) if 1 <= t <= max_x] or [1]  # só na faixa visível
         self.chart.min_x, self.chart.max_x = 1, max_x
         self.chart.bottom_axis = fch.ChartAxis(
             title=ft.Text("Época", size=13, color=C.ON_SURFACE), title_size=22,
@@ -248,7 +251,7 @@ class ComparisonChart:
         self.chart.left_axis = fch.ChartAxis(
             title=ft.Text(output_name, size=13, color=C.ON_SURFACE), title_size=22,
             labels=[_axis_label(t, format_number(t, 3)) for t in ticks], label_size=56)
-        x_ticks = [t for t in nice_ticks(0, n, 8) if t >= 1] or [1]
+        x_ticks = [t for t in nice_ticks(0, n, 8) if 1 <= t <= max(n, 2)] or [1]
         self.chart.min_x, self.chart.max_x = 1, max(n, 2)
         self.chart.bottom_axis = fch.ChartAxis(
             title=ft.Text("Amostra", size=13, color=C.ON_SURFACE), title_size=22,

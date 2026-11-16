@@ -283,7 +283,7 @@ def architecture_table(n_inputs: int, layer_specs: list[dict]) -> ft.Control:
         ],
         rows=rows,
         heading_text_style=ft.TextStyle(weight=ft.FontWeight.W_600, color=C.ON_SURFACE),
-        column_spacing=20,
-        horizontal_margin=8,
+        column_spacing=14,
+        horizontal_margin=4,
     )
     return ft.Row([table], scroll=ft.ScrollMode.AUTO)

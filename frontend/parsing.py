@@ -119,6 +119,8 @@ def format_number(value: float | int | None, digits: int = 4) -> str:
         return "NaN"
     if math.isinf(value):
         return "∞" if value > 0 else "−∞"
+    if 10**digits <= abs(value) < 1e15:  # ex.: 12430,4 -> "12.430" (em vez de "1,243e4")
+        return format_number(int(round(value))).replace("-", "−")
     text = f"{value:.{digits}g}"
     if "e" in text:
         mantissa, exponent = text.split("e")

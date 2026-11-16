@@ -5,7 +5,7 @@ from __future__ import annotations
 import flet as ft
 
 from frontend.components.ui import Message, body, number_field, requirement_list, section
-from frontend.context import AppContext
+from frontend.context import AppContext, updates_page
 from frontend.parsing import ParseError, format_number, parse_float, parse_values_line, to_input_text
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP
@@ -111,6 +111,7 @@ class PredictionView:
         self.message.clear()
 
     # ------------------------------------------------------------------ prever
+    @updates_page
     async def _on_predict(self, _e) -> None:
         state = self.ctx.state
         if not state.has_network or state.training:

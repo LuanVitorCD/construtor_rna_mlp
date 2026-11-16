@@ -23,7 +23,7 @@ from frontend.components.ui import (
     number_field,
     section,
 )
-from frontend.context import AppContext
+from frontend.context import AppContext, updates_page
 from frontend.parsing import ParseError, format_number, parse_int
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP, TASK_LABELS
@@ -330,6 +330,7 @@ class ArchitectureView:
                             output_names=state.output_names(n_out, task=state.task_choice))
 
     # ----------------------------------------------------------------- ações
+    @updates_page
     async def _on_create(self, _e) -> None:
         state = self.ctx.state
         if self._io_mode() == IO_AUTO and state.suggested_io() is None:
