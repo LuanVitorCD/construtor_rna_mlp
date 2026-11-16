@@ -1,7 +1,7 @@
 """Aba 4: avaliação nos subconjuntos (MSE do teste ao final, como pede o enunciado).
 
-Métricas sempre presentes (contrato do service): MSE (e o RMSE derivado dele);
-na classificação, também acurácia e matriz de confusão.
+Métricas sempre presentes (contrato do service): MSE; na classificação, também
+acurácia e matriz de confusão.
 Se o backend também devolver ``y_true``/``y_pred`` (extensão opcional), a tela mostra
 MAE, R², erro relativo médio e o gráfico "desejado × estimado" (Ivan Nunes, cap. 5).
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import flet as ft
 
-from frontend.analysis import column, regression_metrics, rmse
+from frontend.analysis import column, regression_metrics
 from frontend.components.charts import ComparisonChart
 from frontend.components.ui import (
     Message,
@@ -24,6 +24,7 @@ from frontend.context import AppContext
 from frontend.parsing import format_number, format_percent
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP, SUBSET_LABELS
+from frontend.theme import SUCCESS
 
 C = ft.Colors
 
@@ -63,7 +64,8 @@ class EvaluationView:
         self.confusion_holder = ft.Column(tight=True, spacing=8)
         self.confusion_section = section("Matriz de confusão", [self.confusion_holder], icon=ft.Icons.CALL_SPLIT,
                                          subtitle="Linhas: classe real. Colunas: classe prevista. "
-                                                  "A diagonal (em negrito) são os acertos.")
+                                                  "Diagonal (em negrito, verde): acertos. Fora dela "
+                                                  "(vermelho): erros.")
         self.confusion_section.visible = False
         self.summary_holder = ft.Container()
 
@@ -76,7 +78,7 @@ class EvaluationView:
                      self.requirements, self.message.root],
                     icon=ft.Icons.ASSESSMENT,
                 ),
-                section("Resultados", [self.metrics, learn_more("O que significam MSE e RMSE?", HELP["mse"])],
+                section("Resultados", [self.metrics, learn_more("O que significa o MSE?", HELP["mse"])],
                         icon=ft.Icons.INSIGHTS),
                 section("Comparação entre subconjuntos", [self.summary_holder], icon=ft.Icons.TABLE_CHART,
                         subtitle="Treinamento muito melhor que validação/teste indica sobreajuste."),
@@ -156,7 +158,6 @@ class EvaluationView:
         mse = result.get("mse")
         tiles = [
             metric("MSE", format_number(mse), hint=SUBSET_LABELS.get(self.current or "", "")),
-            metric("RMSE (√MSE)", format_number(rmse(mse)), hint="na unidade da saída"),
         ]
         n = result.get("n_samples") or state.split_size(self.current or "")
         if n is not None:
@@ -222,14 +223,21 @@ class EvaluationView:
             cells = [cell(ft.Text(labels[i], weight=ft.FontWeight.W_600, color=C.ON_SURFACE, max_lines=2,
                                   overflow=ft.TextOverflow.ELLIPSIS))]
             for j, value in enumerate(row):
-                alpha = 0.06 + 0.29 * (value / biggest)  # máx. 0,35: texto continua legível
+                # Verde = acertos (diagonal), vermelho = erros; intensidade pela quantidade.
+                # Máx. 0,35 de opacidade: o texto continua legível nos dois temas.
+                alpha = 0.10 + 0.25 * (value / biggest)
+                if value == 0:
+                    bg = None
+                else:
+                    bg = ft.Colors.with_opacity(alpha, SUCCESS if i == j else C.ERROR)
+                kind = "acertos" if i == j else "erros"
                 cells.append(cell(
                     ft.Semantics(
-                        label=f"Real {labels[i]}, previsto {labels[j]}: {value} amostras",
+                        label=f"Real {labels[i]}, previsto {labels[j]}: {value} amostras ({kind})",
                         content=ft.Text(str(value), color=C.ON_SURFACE,
                                         weight=ft.FontWeight.BOLD if i == j else ft.FontWeight.NORMAL),
                     ),
-                    bg=ft.Colors.with_opacity(alpha, C.PRIMARY),
+                    bg=bg,
                 ))
             rows.append(ft.Row(cells, spacing=0))
         correct = sum(matrix[i][i] for i in range(k))
@@ -245,8 +253,7 @@ class EvaluationView:
             self.summary_holder.content = body("Nenhuma avaliação ainda.")
             return
         has_acc = any("accuracy" in r for r in evals.values())
-        columns = [ft.DataColumn(ft.Text("Subconjunto")), ft.DataColumn(ft.Text("MSE"), numeric=True),
-                   ft.DataColumn(ft.Text("RMSE"), numeric=True)]
+        columns = [ft.DataColumn(ft.Text("Subconjunto")), ft.DataColumn(ft.Text("MSE"), numeric=True)]
         if has_acc:
             columns.append(ft.DataColumn(ft.Text("Acertos"), numeric=True))
         rows = []
@@ -255,8 +262,7 @@ class EvaluationView:
             if not r:
                 continue
             cells = [ft.DataCell(ft.Text(SUBSET_LABELS[key])),
-                     ft.DataCell(ft.Text(format_number(r.get("mse")))),
-                     ft.DataCell(ft.Text(format_number(rmse(r.get("mse")))))]
+                     ft.DataCell(ft.Text(format_number(r.get("mse"))))]
             if has_acc:
                 acc = r.get("accuracy")
                 cells.append(ft.DataCell(ft.Text(format_percent(100 * acc) if acc is not None else "—")))

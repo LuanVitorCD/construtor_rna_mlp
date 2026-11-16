@@ -16,16 +16,32 @@ import flet as ft
 
 from frontend.analysis import Insight
 from frontend.texts import activation_label
+from frontend.theme import ON_SUCCESS_CONTAINER, SUCCESS, SUCCESS_CONTAINER
 
 C = ft.Colors
 
 LEVELS: dict[str, tuple[ft.IconData, str, str, str]] = {
     # nível: (ícone, fundo, texto, nome falado)
     "info": (ft.Icons.INFO_OUTLINE, C.SURFACE_CONTAINER_HIGH, C.ON_SURFACE, "Informação"),
-    "success": (ft.Icons.CHECK_CIRCLE_OUTLINE, C.SECONDARY_CONTAINER, C.ON_SECONDARY_CONTAINER, "Concluído"),
+    "success": (ft.Icons.CHECK_CIRCLE_OUTLINE, SUCCESS_CONTAINER, ON_SUCCESS_CONTAINER, "Concluído"),
     "warning": (ft.Icons.WARNING_AMBER, C.TERTIARY_CONTAINER, C.ON_TERTIARY_CONTAINER, "Atenção"),
     "error": (ft.Icons.ERROR_OUTLINE, C.ERROR_CONTAINER, C.ON_ERROR_CONTAINER, "Erro"),
 }
+
+# Cor de destaque (borda e ícone): verde = sucesso, vermelho = erro.
+ACCENTS: dict[str, str] = {
+    "info": C.OUTLINE_VARIANT,  # discreta: o destaque fica para verde/vermelho
+    "success": SUCCESS,
+    "warning": C.TERTIARY,
+    "error": C.ERROR,
+}
+
+
+def level_icon_color(level: str) -> str:
+    """Ícone verde/vermelho em sucesso/erro; nos demais níveis, a cor do texto."""
+    if level in ("success", "error"):
+        return ACCENTS[level]
+    return LEVELS.get(level, LEVELS["info"])[2]
 
 
 def heading(text: str, *, style: ft.TextThemeStyle = ft.TextThemeStyle.TITLE_MEDIUM) -> ft.Control:
@@ -82,13 +98,14 @@ def _message_box(level: str, title: str, text: str | None) -> ft.Container:
     return ft.Container(
         content=ft.Row(
             [
-                ft.Icon(icon, color=fg, size=22, semantics_label=spoken),
+                ft.Icon(icon, color=level_icon_color(level), size=22, semantics_label=spoken),
                 ft.Column(lines, spacing=2, tight=True, expand=True),
             ],
             spacing=12,
             vertical_alignment=ft.CrossAxisAlignment.START,
         ),
         bgcolor=bg,
+        border=ft.Border.all(1.5, ACCENTS.get(level, C.OUTLINE)),
         border_radius=10,
         padding=ft.Padding.symmetric(horizontal=14, vertical=12),
     )
@@ -211,7 +228,7 @@ def requirement_list(items: list[tuple[str, bool]]) -> ft.Column:
                 [
                     ft.Icon(
                         ft.Icons.CHECK_CIRCLE if done else ft.Icons.RADIO_BUTTON_UNCHECKED,
-                        color=C.PRIMARY if done else C.ON_SURFACE_VARIANT,
+                        color=SUCCESS if done else C.ON_SURFACE_VARIANT,
                         size=20,
                         semantics_label="feito" if done else "pendente",
                     ),

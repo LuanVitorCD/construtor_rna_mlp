@@ -96,7 +96,10 @@ HELP = {
         "memorizando o ruído (sobreajuste). O ponto de menor MSE de validação é o ponto de "
         "parada antecipada (Haykin, Fig. 4.20)."
     ),
-    "mse": "MSE = (1/N) · Σ (y − ŷ)², a média dos erros ao quadrado. RMSE = √MSE, na mesma unidade da saída.",
+    "mse": (
+        "MSE = (1/N) · Σ (y − ŷ)²: a média dos erros ao quadrado entre a saída esperada (y) e a "
+        "saída prevista pela rede (ŷ). Quanto menor, melhor."
+    ),
     "test": (
         "Use o conjunto de teste só na avaliação final, depois de escolher arquitetura e "
         "hiperparâmetros. O erro de validação tende a subestimar o erro real (Goodfellow, cap. 5)."

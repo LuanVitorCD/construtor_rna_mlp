@@ -16,6 +16,11 @@ primária, porque ali o contraste é alto (5,94:1).
 
 Os componentes usam *tokens* do ColorScheme (``ft.Colors.PRIMARY``, ``ft.Colors.ON_SURFACE`` ...)
 em vez de hexadecimais. Assim, trocar o tema recolore tudo sem reconstruir a interface.
+
+Verde de sucesso: o Material 3 não tem um papel "success". Por isso os papéis
+``tertiary_fixed*`` (que nenhum componente padrão usa) guardam o verde de
+"concluído/sucesso". O vermelho de erro é o papel ``error``. Use os apelidos
+``SUCCESS*`` abaixo em vez dos nomes originais.
 """
 
 from __future__ import annotations
@@ -25,6 +30,11 @@ import flet as ft
 BRAND_CC_BLUE = "#1362AD"
 BRAND_SW_NAVY = "#115D8F"
 BRAND_SW_CYAN = "#18A8DA"
+
+# Verde de sucesso (papéis tertiary_fixed* reaproveitados; ver docstring).
+SUCCESS = ft.Colors.TERTIARY_FIXED_DIM  # ícones, bordas e textos curtos
+SUCCESS_CONTAINER = ft.Colors.TERTIARY_FIXED  # fundo de mensagens de sucesso
+ON_SUCCESS_CONTAINER = ft.Colors.ON_TERTIARY_FIXED  # texto sobre esse fundo
 
 # Chaves = nomes dos campos de ft.ColorScheme.
 LIGHT: dict[str, str] = {
@@ -44,6 +54,9 @@ LIGHT: dict[str, str] = {
     "on_error": "#FFFFFF",
     "error_container": "#F9DEDC",
     "on_error_container": "#410E0B",
+    "tertiary_fixed": "#D7F3DE",  # sucesso: fundo
+    "on_tertiary_fixed": "#0B3D1A",  # sucesso: texto
+    "tertiary_fixed_dim": "#1E7A34",  # sucesso: ícone/borda/texto curto
     "surface": "#FFFFFF",
     "on_surface": "#1A1C1E",
     "on_surface_variant": "#4A5560",
@@ -79,6 +92,9 @@ DARK: dict[str, str] = {
     "on_error": "#690005",
     "error_container": "#93000A",
     "on_error_container": "#FFDAD6",
+    "tertiary_fixed": "#1B4227",  # sucesso: fundo
+    "on_tertiary_fixed": "#CDEFD6",  # sucesso: texto
+    "tertiary_fixed_dim": "#7DD99A",  # sucesso: ícone/borda/texto curto
     "surface": "#0F1720",
     "on_surface": "#E6EDF3",
     "on_surface_variant": "#A9B6C3",
@@ -122,6 +138,13 @@ CONTRAST_PAIRS: list[tuple[str, str, float]] = [
     ("tertiary", "surface", GRAPHIC),  # linha de validação no gráfico
     ("tertiary", "surface_container_low", GRAPHIC),
     ("secondary", "surface_container_low", GRAPHIC),  # marcador da melhor época
+    # Verde (sucesso) e vermelho (erro)
+    ("on_tertiary_fixed", "tertiary_fixed", TEXT),  # texto da mensagem de sucesso
+    ("tertiary_fixed_dim", "tertiary_fixed", GRAPHIC),  # ícone/borda verde na mensagem
+    ("tertiary_fixed_dim", "surface", TEXT),  # "✓ soma 100%"
+    ("tertiary_fixed_dim", "surface_container_low", TEXT),
+    ("tertiary_fixed_dim", "primary_container", GRAPHIC),  # ✓ na aba selecionada
+    ("error", "error_container", GRAPHIC),  # ícone/borda vermelha na mensagem
 ]
 
 

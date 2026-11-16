@@ -1,5 +1,3 @@
-import math
-
 import pytest
 
 from frontend.analysis import (
@@ -12,7 +10,6 @@ from frontend.analysis import (
     flatten,
     output_activation_warning,
     regression_metrics,
-    rmse,
     samples_per_parameter,
     suggest_hidden_neurons,
     suggest_output_neurons,
@@ -84,7 +81,7 @@ def test_downsample_mantem_extremos_e_indice_pedido():
 def test_regression_metrics():
     m = regression_metrics([1.0, 2.0, 3.0], [1.0, 2.0, 5.0])
     assert m["mse"] == pytest.approx(4 / 3)
-    assert m["rmse"] == pytest.approx(math.sqrt(4 / 3))
+    assert "rmse" not in m  # RMSE fora da interface (não visto em aula)
     assert m["mae"] == pytest.approx(2 / 3)
     assert m["r2"] == pytest.approx(1 - 4 / 2)
     assert m["mean_rel_error_pct"] == pytest.approx(100 * (2 / 3) / 3)
@@ -99,10 +96,9 @@ def test_column_e_flatten_aceitam_listas_de_listas():
     assert column([1, 2], 0) == [1.0, 2.0]
 
 
-def test_rmse_e_acuracia():
-    assert rmse(4.0) == 2.0
-    assert rmse(None) is None and rmse(float("nan")) is None
+def test_acuracia_pela_matriz():
     assert accuracy_from_confusion([[5, 1], [0, 4]]) == pytest.approx(0.9)
+    assert accuracy_from_confusion([[0, 0], [0, 0]]) is None
 
 
 def test_samples_per_parameter():

@@ -20,6 +20,7 @@ from frontend.context import AppContext
 from frontend.parsing import ParseError, format_number, format_percent, parse_float, parse_int
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP, NORMALIZATION_LABELS, NORMALIZATION_SHORT, SUBSET_LABELS
+from frontend.theme import SUCCESS
 
 C = ft.Colors
 ROLE_INPUT, ROLE_OUTPUT, ROLE_IGNORE = "in", "out", "skip"
@@ -352,7 +353,7 @@ class DataView:
         total = sum(pcts)
         ok = abs(total - 100) < 1e-9
         self.pct_total.value = f"Total: {format_percent(total)} " + ("✓ soma 100%" if ok else "✗ precisa somar 100%")
-        self.pct_total.color = C.PRIMARY if ok else C.ERROR
+        self.pct_total.color = SUCCESS if ok else C.ERROR
 
     async def _on_split(self, _e) -> None:
         state = self.ctx.state

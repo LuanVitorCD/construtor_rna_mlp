@@ -69,6 +69,10 @@ def test_fluxo_completo_de_regressao(csv_regressao):
         assert set(state.evaluations) == {"train", "val", "test"}
         assert not ev.comparison_section.visible  # o service não devolve y_true/y_pred
         assert not ev.confusion_section.visible  # regressão: sem matriz
+        tile_labels = [tile.content.label for tile in ev.metrics.controls]
+        summary_cols = [c.label.value for c in ev.summary_holder.content.columns]
+        assert not any("RMSE" in t for t in tile_labels + summary_cols)  # RMSE removido
+        assert summary_cols == ["Subconjunto", "MSE"]
 
         pred.paste.value = "10; 3; 5"
         pred._on_fill(None)
@@ -97,6 +101,16 @@ def test_fluxo_de_classificacao(csv_classes):
         await page.tasks[-1]
         await ev._on_evaluate(None)
         assert ev.confusion_section.visible and not ev.comparison_section.visible
+        # Matriz: acertos (diagonal) em verde, erros em vermelho, zeros sem cor.
+        grid = ev.confusion_holder.controls[0].controls[0].controls  # linhas da grade
+        matrix = state.evaluations["test"]["confusion_matrix"]
+        for i, row in enumerate(matrix):
+            for j, value in enumerate(row):
+                bg = grid[i + 1].controls[j + 1].bgcolor
+                if value == 0:
+                    assert bg is None
+                else:
+                    assert ("tertiaryfixeddim" if i == j else "error") in str(bg)
         for f, v in zip(pred.fields, ("1", "2")):
             f.value = v
         await pred._on_predict(None)

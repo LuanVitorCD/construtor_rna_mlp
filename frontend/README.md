@@ -15,7 +15,7 @@ backend não existir, a interface abre em **modo demonstração**, com resultado
   rede, dividir em treinamento/validação/teste e normalizar as entradas (Min-Max ou Z-score).
 - **Treinamento:** definir épocas e taxa de aprendizagem (η) e acompanhar ao vivo a curva do MSE de
   treinamento e de validação. A tela marca a melhor época, avisa sobre sobreajuste e exporta o histórico em CSV.
-- **Avaliação:** MSE e RMSE por subconjunto. Na classificação, também acurácia e matriz de confusão.
+- **Avaliação:** MSE por subconjunto. Na classificação, também acurácia e matriz de confusão.
 - **Previsão:** calcular a saída da rede para novos valores de entrada.
 - **Modelos:** abrir e salvar redes em arquivo JSON.
 - **Acessibilidade:** tema claro e escuro com as cores das logos do curso e contraste WCAG AA, atalhos de

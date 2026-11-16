@@ -8,7 +8,7 @@ import os
 import flet as ft
 
 from frontend import theme
-from frontend.components.ui import LEVELS, heading
+from frontend.components.ui import LEVELS, heading, level_icon_color
 from frontend.context import AppContext
 from frontend.service_gateway import GatewayError, create_gateway
 from frontend.state import AppState
@@ -169,8 +169,10 @@ class AppShell:
         done = [state.has_network, state.has_split, state.is_trained and state.trained_epochs > 0,
                 bool(state.evaluations), False]
         for dest, (icon, sel, _l, _d), ok in zip(self.rail.destinations, STEPS, done):
-            dest.icon = ft.Icons.TASK_ALT if ok else icon
-            dest.selected_icon = ft.Icons.TASK_ALT if ok else sel
+            # Etapa concluída: ✓ verde (o rótulo da etapa continua em texto ao lado).
+            dest.icon = ft.Icon(ft.Icons.TASK_ALT, color=theme.SUCCESS, semantics_label="concluída") if ok else icon
+            dest.selected_icon = (ft.Icon(ft.Icons.TASK_ALT, color=theme.SUCCESS, semantics_label="concluída")
+                                  if ok else sel)
         self.rail.disabled = False
         self.open_btn.disabled = state.training
         self.save_btn.disabled = state.training or not state.has_network
@@ -238,7 +240,7 @@ class AppShell:
     def toast(self, level: str, text: str) -> None:
         icon, bg, fg, spoken = LEVELS.get(level, LEVELS["info"])
         self.page.show_dialog(ft.SnackBar(
-            content=ft.Row([ft.Icon(icon, color=fg, semantics_label=spoken),
+            content=ft.Row([ft.Icon(icon, color=level_icon_color(level), semantics_label=spoken),
                             ft.Text(text, color=fg, expand=True, selectable=True)], spacing=12),
             bgcolor=bg,
             behavior=ft.SnackBarBehavior.FLOATING,

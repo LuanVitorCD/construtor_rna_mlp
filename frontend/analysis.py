@@ -220,7 +220,7 @@ def column(values: Any, index: int) -> list[float]:
 
 
 def regression_metrics(y_true: Sequence[float], y_pred: Sequence[float]) -> dict[str, float | None]:
-    """MSE, RMSE, MAE, R² e erro relativo médio (%), calculados a partir das listas."""
+    """MSE, MAE, R² e erro relativo médio (%), calculados a partir das listas."""
     n = len(y_true)
     if n == 0 or n != len(y_pred):
         return {}
@@ -236,13 +236,7 @@ def regression_metrics(y_true: Sequence[float], y_pred: Sequence[float]) -> dict
         if len(nonzero) == n
         else None  # indefinido quando há alvos iguais a zero
     )
-    return {"mse": mse, "rmse": math.sqrt(mse), "mae": mae, "r2": r2, "mean_rel_error_pct": rel}
-
-
-def rmse(mse: float | None) -> float | None:
-    if mse is None or not _finite(mse) or mse < 0:
-        return None
-    return math.sqrt(mse)
+    return {"mse": mse, "mae": mae, "r2": r2, "mean_rel_error_pct": rel}
 
 
 def accuracy_from_confusion(matrix: Sequence[Sequence[int]]) -> float | None:
