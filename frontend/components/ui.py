@@ -90,11 +90,18 @@ def section(
     )
 
 
-def _message_box(level: str, title: str, text: str | None) -> ft.Container:
+def _message_box(level: str, title: str, text: str | None, action: tuple[str, Callable] | None = None) -> ft.Container:
     icon, bg, fg, spoken = LEVELS.get(level, LEVELS["info"])
     lines: list[ft.Control] = [ft.Text(title, weight=ft.FontWeight.W_600, color=fg, selectable=True)]
     if text:
         lines.append(ft.Text(text, color=fg, selectable=True))
+    if action:  # correção rápida; usa a cor do texto da mensagem (contraste garantido no tema)
+        label, on_click = action
+        lines.append(ft.Container(
+            ft.OutlinedButton(label, on_click=on_click,
+                              style=ft.ButtonStyle(color=fg, side=ft.BorderSide(1, fg))),
+            padding=ft.Padding.only(top=6),
+        ))
     return ft.Container(
         content=ft.Row(
             [
@@ -125,18 +132,22 @@ class Message:
         self.root = ft.Semantics(live_region=True, content=self._holder, visible=False)
         self.level: str | None = None
         self.title: str | None = None
+        self.action: tuple[str, Callable] | None = None
 
     @property
     def visible(self) -> bool:
         return bool(self.root.visible)
 
-    def show(self, level: str, title: str, text: str | None = None) -> None:
+    def show(self, level: str, title: str, text: str | None = None,
+             action: tuple[str, Callable] | None = None) -> None:
+        """``action`` = (rótulo, handler) mostra um botão de correção rápida na mensagem."""
         self.level, self.title = level, title
-        self._holder.content = _message_box(level, title, text)
+        self.action = action
+        self._holder.content = _message_box(level, title, text, action)
         self.root.visible = True
 
     def clear(self) -> None:
-        self.level = self.title = None
+        self.level = self.title = self.action = None
         self._holder.content = None
         self.root.visible = False
 

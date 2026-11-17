@@ -162,7 +162,10 @@ class AppShell:
                                        tooltip="Ativar tema escuro (Ctrl+T)")
         self.keys_btn = ft.IconButton(ft.Icons.KEYBOARD, on_click=self._on_show_shortcuts,
                                       tooltip="Atalhos de teclado")
-        self.text_buttons = [self.menu_btn, self.template_btn, self.save_btn, self.open_other_btn]
+        self.reset_btn = ft.TextButton("Reiniciar tudo", icon=ft.Icons.RESTART_ALT, on_click=self._on_reset_all,
+                                       tooltip="Apagar rede, CSV, configurações e resultados e começar de novo "
+                                               "(Ctrl+R)")
+        self.text_buttons = [self.menu_btn, self.template_btn, self.save_btn, self.reset_btn, self.open_other_btn]
         self.title_text = ft.Text(APP_TITLE, theme_style=ft.TextThemeStyle.TITLE_LARGE, weight=ft.FontWeight.W_700)
         # Subtítulo longo: 1 linha com reticências em janelas estreitas; texto completo no tooltip.
         self.subtitle_text = ft.Text(APP_SUBTITLE, theme_style=ft.TextThemeStyle.BODY_SMALL, max_lines=1,
@@ -234,7 +237,7 @@ class AppShell:
             views, CREATE_STEPS, page=self.page,
             done=lambda s: [s.data_ready, s.has_network, s.trained_epochs > 0, bool(s.evaluations), False])
         self.body.content = self.workspace.root
-        self._set_actions([self.template_btn, self.save_btn, self.menu_btn])
+        self._set_actions([self.template_btn, self.save_btn, self.reset_btn, self.menu_btn])
         self.refresh()
         self.page.update()
 
@@ -258,6 +261,27 @@ class AppShell:
         self.refresh()
         self.page.update()
         self.toast("success", f"Modelo aberto: {os.path.basename(path)} ({state.architecture_text()}).")
+
+    @updates_page
+    async def _on_reset_all(self, _e=None) -> None:
+        """Modo "Criar novo modelo": apaga tudo e recomeça (com confirmação)."""
+        state = self.ctx.state
+        if state.mode != "create" or self.workspace is None:
+            return
+        if state.training:
+            self.toast("warning", "Pare o treinamento antes de reiniciar.")
+            return
+        ok = await self.confirm(
+            "Reiniciar tudo?",
+            "A rede, o CSV escolhido, todas as configurações e os resultados desta sessão serão apagados, "
+            "e você volta para a aba Dados. Salve o modelo antes, se quiser mantê-lo. "
+            "Esta ação não pode ser desfeita.",
+            "Reiniciar tudo",
+        )
+        if not ok:
+            return
+        await self.start_create()  # service novo + telas novas
+        self.toast("info", "Tudo foi reiniciado. Comece pela aba Dados.")
 
     @updates_page
     async def _on_back_to_menu(self, _e=None) -> None:
@@ -290,6 +314,7 @@ class AppShell:
             self.workspace.refresh(state)
         busy = state.training
         self.menu_btn.disabled = busy
+        self.reset_btn.disabled = busy
         self.template_btn.disabled = busy
         self.open_other_btn.disabled = busy
         self.save_btn.disabled = busy or not state.has_network
@@ -518,6 +543,8 @@ class AppShell:
                 await self._on_open_other_model()
         elif key == "S":
             await self._on_save_model()
+        elif key == "R" and mode == "create":
+            await self._on_reset_all()
         elif key == "M":
             await self._on_back_to_menu()
         elif key == "T":

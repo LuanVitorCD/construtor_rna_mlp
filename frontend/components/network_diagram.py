@@ -45,6 +45,13 @@ class NetworkDiagram:
             tight=True,
         )
 
+    def clear(self, message: str) -> None:
+        """Sem desenho (ex.: entradas/saídas ainda indefinidas): mostra só a explicação."""
+        self.canvas.shapes = []
+        self.canvas.height = 0
+        self._semantics.label = message
+        self.caption.value = message
+
     def render(
         self,
         n_inputs: int,

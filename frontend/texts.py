@@ -157,6 +157,7 @@ SHORTCUTS = [
     ("Ctrl + N", "Menu inicial: começar “Criar novo modelo”"),
     ("Ctrl + O", "Abrir modelo salvo (no modo Criar: usar como base)"),
     ("Ctrl + S", "Salvar modelo (JSON), no modo Criar"),
+    ("Ctrl + R", "Reiniciar tudo (modo Criar), com confirmação"),
     ("Ctrl + M", "Voltar ao menu de escolha de modo"),
     ("Ctrl + T", "Alternar tema claro/escuro"),
     ("Tab / Shift + Tab", "Navegar entre os campos"),

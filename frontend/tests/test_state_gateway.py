@@ -184,3 +184,23 @@ def test_gateway_reset_cria_service_novo():
     gw.call_sync("create_network", 2, [{"neurons": 1, "activation": "linear"}])
     gw.reset()
     assert gw.service is not old and gw.service.network is None
+
+
+def test_profile_columns_detecta_texto_e_conta_valores(tmp_path):
+    from frontend.csv_utils import profile_columns
+
+    path = tmp_path / "p.csv"
+    path.write_text("x,y,classe\n1,2.5, a\n2,,b\n3,1e3,a\n", encoding="utf-8")
+    prof = profile_columns(str(path), ["x", "y", "classe"])
+    assert prof["x"].numeric and prof["x"].distinct == ["1", "2", "3"]
+    assert prof["y"].non_numeric == "(vazio)"  # célula vazia não é número (como no backend)
+    assert prof["classe"].non_numeric == "a" and prof["classe"].distinct == ["a", "b"]
+    assert profile_columns(str(path), ["nao_existe"]) is None
+
+
+def test_selection_problem_bloqueia_a_sugestao():
+    s = AppState()
+    s.csv_path, s.input_cols, s.output_cols = "d.csv", ["a"], ["y"]
+    assert s.suggested_io() == (1, 1)
+    s.selection_problem = "A saída “y” não é numérica."
+    assert s.suggested_io() is None

@@ -33,7 +33,7 @@ def test_fluxo_completo_de_regressao_csv_primeiro(csv_regressao):
         state, page, (data, arch, train, ev, pred), _toasts, _gw = build_app()
         # Antes de tudo: criar rede (modo Automático), treinar e prever ficam bloqueados.
         assert arch.create_btn.disabled and train.start_btn.disabled and pred.predict_btn.disabled
-        assert arch.go_data_btn.visible
+        assert arch.io_message.action and arch.io_message.action[0] == "Ir para a aba Dados"
 
         await data.open_csv(csv_regressao)
         assert state.columns == ["x1", "x2", "x3", "y"]
@@ -193,6 +193,9 @@ def test_classificacao_com_rotulo_continuo_e_bloqueada(csv_regressao):
         data._on_task_change(None)
         await data.open_csv(csv_regressao)  # "y" tem 60 valores: ainda vale como rótulo (< 1000)
         assert state.suggested_io() == (3, 60)
+        # ...mas são 60 "classes" numéricas: avisa e oferece voltar para Regressão (sem bloquear)
+        assert data.selection_message.level == "warning"
+        assert data.selection_message.action[0] == "Mudar para Regressão"
         data._on_role_change("x3", ["out"])  # duas colunas de saída: não pode na classificação
         assert data.selection_message.level == "warning" and state.suggested_io() is None
         assert arch.create_btn.disabled
@@ -346,5 +349,44 @@ def test_modo_usar_modelo_existente(csv_regressao, tmp_path):
         upred._on_fill(None)
         await upred._on_predict(None)
         assert len(upred._history) == 1
+
+    asyncio.run(flow())
+
+
+def test_rotulo_de_texto_com_regressao_e_detectado_na_aba_dados(csv_classes):
+    """Cenário do vídeo: esquecer de mudar para Classificação. O problema aparece na aba Dados,
+    com correção rápida, antes de criar a rede (sem vai e vem entre as abas)."""
+    async def flow():
+        state, _page, (data, arch, _train, _ev, _pred), _toasts, _gw = build_app()
+        await data.open_csv(csv_classes)  # tarefa ainda em Regressão; saída "classe" = x/y/z
+        msg = data.selection_message
+        assert msg.level == "error" and msg.title == "A saída “classe” não é numérica"
+        assert msg.action[0] == "Mudar para Classificação"
+        assert state.selection_problem and state.suggested_io() is None
+        # Arquitetura (automático) não deixa criar e explica o porquê, com atalho para Dados
+        assert arch.create_btn.disabled
+        assert arch.io_message.title == "Os dados escolhidos têm um problema"
+        assert arch.io_message.action[0] == "Ir para a aba Dados"
+
+        msg.action[1](None)  # clique em "Mudar para Classificação"
+        assert state.task_choice == "classification" and data.task.selected == ["classification"]
+        assert state.selection_problem is None and state.suggested_io() == (2, 3)
+        assert arch.out_activation.value == "sigmoid" and not arch.create_btn.disabled
+        await arch._on_create(None)
+        assert state.data_ready and arch.message.title == "Rede criada e dados aplicados"
+
+    asyncio.run(flow())
+
+
+def test_entrada_nao_numerica_e_bloqueada(csv_classes):
+    async def flow():
+        state, _page, (data, arch, _train, _ev, _pred), _toasts, _gw = build_app()
+        await data.open_csv(csv_classes)
+        data._on_role_change("classe", ["in"])  # texto marcado como entrada
+        data._on_role_change("b", ["out"])
+        assert data.selection_message.title == "A entrada “classe” não é numérica"
+        assert state.suggested_io() is None and arch.create_btn.disabled
+        data._on_role_change("classe", ["skip"])
+        assert state.selection_problem is None and state.suggested_io() == (1, 1)
 
     asyncio.run(flow())

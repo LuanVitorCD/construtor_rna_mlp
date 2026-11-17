@@ -23,7 +23,7 @@ from frontend.components.ui import (
     section,
 )
 from frontend.context import AppContext, updates_page
-from frontend.csv_utils import MAX_CLASSES, distinct_values
+from frontend.csv_utils import MAX_CLASSES, profile_columns
 from frontend.parsing import ParseError, format_number, format_percent, parse_float, parse_int
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP, NORMALIZATION_LABELS, NORMALIZATION_SHORT, SUBSET_LABELS, TASK_LABELS
@@ -39,6 +39,7 @@ class DataView:
     def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
         self._roles: dict[str, str] = {}
+        self._profiles = None  # perfil das colunas escolhidas (csv_utils)
         state = ctx.state
 
         # --- tarefa
@@ -246,58 +247,96 @@ class DataView:
                 [c for c in cols if self._roles.get(c) == ROLE_OUTPUT])
 
     def _sync_selection(self) -> None:
-        """Leva a seleção para o estado e conta as classes (classificação)."""
+        """Leva a seleção para o estado, lê o perfil das colunas e conta as classes."""
         state = self.ctx.state
         ins, outs = self._selected()
         state.input_cols, state.output_cols = ins, outs
+        self._profiles = (profile_columns(state.csv_path, ins + outs)
+                          if state.csv_path and (ins or outs) else None)
         labels: list[str] = []
-        if state.task_choice == "classification" and state.csv_path and len(outs) == 1:
-            labels = distinct_values(state.csv_path, outs[0]) or []
+        if state.task_choice == "classification" and len(outs) == 1 and self._profiles:
+            labels = self._profiles[outs[0]].distinct
         state.class_labels_preview = labels
         self._update_selection_message()
 
-    def _update_selection_message(self) -> None:
+    def _switch_task(self, task: str) -> None:
+        """Correção rápida a partir da mensagem da seleção."""
+        self.task.selected = [task]
+        self._on_task_change(None)
+
+    def _diagnose(self) -> tuple[str, str, str, tuple | None, bool]:
+        """(nível, título, texto, ação rápida, bloqueia?) para a seleção atual de colunas."""
         state = self.ctx.state
         ins, outs = state.input_cols, state.output_cols
-        self.role_counts.value = f"Entradas: {len(ins)} · Saídas: {len(outs)}"
+        profiles = self._profiles or {}
+        if not ins or not outs:
+            return ("warning", "Seleção incompleta",
+                    "Marque ao menos uma coluna de entrada e uma de saída.", None, True)
+        for col in ins:
+            prof = profiles.get(col)
+            if prof and not prof.numeric:
+                return ("error", f"A entrada “{col}” não é numérica",
+                        f"Exemplo de valor: “{prof.non_numeric}”. As entradas da rede precisam ser números: "
+                        "marque esta coluna como Ignorar (ou como Saída, se ela for o rótulo de uma "
+                        "classificação).", None, True)
+        if state.task_choice == "regression":
+            for col in outs:
+                prof = profiles.get(col)
+                if prof and not prof.numeric:
+                    action = (("Mudar para Classificação", lambda _e: self._switch_task("classification"))
+                              if len(outs) == 1 else None)
+                    return ("error", f"A saída “{col}” não é numérica",
+                            f"Exemplo de valor: “{prof.non_numeric}”. Na regressão a saída precisa ser um "
+                            "número. Se esta coluna é o rótulo de uma classe, a tarefa certa é Classificação.",
+                            action, True)
+            return ("success", f"A rede precisa de {len(ins)} entrada(s) e {len(outs)} neurônio(s) de saída",
+                    "A aba Arquitetura usa esses números no modo Automático.", None, False)
+
+        # Classificação
+        if len(outs) != 1:
+            return ("warning", "Classificação usa 1 coluna de rótulo",
+                    "Marque exatamente uma coluna de saída: a que contém a classe.", None, True)
+        col, labels = outs[0], state.class_labels_preview
+        prof = profiles.get(col)
+        to_regression = (("Mudar para Regressão", lambda _e: self._switch_task("regression"))
+                         if prof and prof.numeric else None)
+        if not prof:
+            return ("error", "Não foi possível ler a coluna de rótulo",
+                    f"Confira o arquivo: a coluna “{col}” não pôde ser lida.", None, True)
+        if len(labels) > MAX_CLASSES:
+            return ("error", f"A coluna “{col}” parece contínua",
+                    f"Ela tem mais de {MAX_CLASSES} valores diferentes. Para prever valores contínuos, "
+                    "a tarefa certa é Regressão.", to_regression, True)
+        if len(labels) < 2:
+            return ("error", "Rótulo com menos de 2 classes",
+                    f"A coluna “{col}” precisa ter ao menos 2 valores diferentes.", None, True)
+        shown = ", ".join(labels[:8]) + ("…" if len(labels) > 8 else "")
+        n_out = 1 if len(labels) == 2 else len(labels)
+        how = "1 neurônio de saída (0/1)" if n_out == 1 else f"{n_out} neurônios de saída (one-hot)"
+        if prof.numeric and len(labels) > 20:
+            return ("warning", f"{len(labels)} classes numéricas: “{col}” parece uma coluna contínua",
+                    f"Se “{col}” é um valor a prever (e não uma categoria), use Regressão. Se são mesmo "
+                    f"categorias, a rede terá {len(ins)} entrada(s) e {how}.", to_regression, False)
+        return ("success", f"A rede precisa de {len(ins)} entrada(s) e {how}",
+                f"{len(labels)} classes em “{col}”: {shown}. A aba Arquitetura usa esses números no modo "
+                "Automático.", None, False)
+
+    def _update_selection_message(self) -> None:
+        state = self.ctx.state
+        self.role_counts.value = f"Entradas: {len(state.input_cols)} · Saídas: {len(state.output_cols)}"
         if not state.csv_path:
+            state.selection_problem = None
             self.selection_message.clear()
             return
-        if not ins or not outs:
-            self.selection_message.show("warning", "Seleção incompleta",
-                                        "Marque ao menos uma coluna de entrada e uma de saída.")
-            return
-        if state.task_choice == "classification":
-            labels = state.class_labels_preview
-            if len(outs) != 1:
-                self.selection_message.show("warning", "Classificação usa 1 coluna de rótulo",
-                                            "Marque exatamente uma coluna de saída: a que contém a classe.")
-                return
-            if len(labels) > MAX_CLASSES:
-                self.selection_message.show("error", f"A coluna “{outs[0]}” parece contínua",
-                                            f"Ela tem mais de {MAX_CLASSES} valores diferentes. Para prever "
-                                            "valores contínuos, escolha a tarefa Regressão.")
-                return
-            if len(labels) < 2:
-                self.selection_message.show("error", "Rótulo com menos de 2 classes",
-                                            f"A coluna “{outs[0]}” precisa ter ao menos 2 valores diferentes.")
-                return
-            shown = ", ".join(labels[:8]) + ("…" if len(labels) > 8 else "")
-            n_out = 1 if len(labels) == 2 else len(labels)
-            how = "1 neurônio de saída (0/1)" if n_out == 1 else f"{n_out} neurônios de saída (one-hot)"
-            self.selection_message.show("success", f"A rede precisa de {len(ins)} entrada(s) e {how}",
-                                        f"{len(labels)} classes em “{outs[0]}”: {shown}. "
-                                        "A aba Arquitetura usa esses números no modo Automático.")
-        else:
-            self.selection_message.show("success",
-                                        f"A rede precisa de {len(ins)} entrada(s) e {len(outs)} neurônio(s) de saída",
-                                        "A aba Arquitetura usa esses números no modo Automático.")
+        level, title, text, action, blocking = self._diagnose()
+        state.selection_problem = f"{title}. {text}" if blocking else None
         suggestion = state.suggested_io()
         if state.has_network and suggestion and suggestion != (state.n_inputs, state.n_outputs):
-            self.selection_message.show(
-                "error", "Diferente da rede atual",
-                f"Os dados pedem {suggestion[0]} entrada(s) e {suggestion[1]} saída(s); a rede atual tem "
-                f"{state.n_inputs} e {state.n_outputs}. Recrie a rede na aba Arquitetura (modo Automático).")
+            level, title, action = "error", "Diferente da rede atual", ("Ir para Arquitetura",
+                                                                        lambda _e: self.ctx.navigate(1))
+            text = (f"Os dados pedem {suggestion[0]} entrada(s) e {suggestion[1]} saída(s); a rede atual tem "
+                    f"{state.n_inputs} e {state.n_outputs}. Recrie a rede na aba Arquitetura (modo Automático).")
+        self.selection_message.show(level, title, text, action)
 
     # ---------------------------------------------------------- alterações
     def _changed(self, *, notify: bool = True) -> None:
@@ -477,7 +516,8 @@ class DataView:
         if state.has_network and state.task != state.task_choice:
             self.task_message.show("warning", "A tarefa mudou",
                                    f"A rede atual é de {TASK_LABELS[state.task]}. Recrie a rede na aba "
-                                   "Arquitetura para usar a nova tarefa.")
+                                   "Arquitetura para usar a nova tarefa.",
+                                   action=("Ir para Arquitetura", lambda _e: self.ctx.navigate(1)))
         else:
             self.task_message.clear()
         if state.data_dirty:

@@ -15,7 +15,8 @@ Ao abrir, a aplicação pergunta como começar. Os dois modos têm um botão par
 
 - **Dados:** escolher a tarefa (regressão ou classificação), carregar um CSV, marcar as colunas de entrada
   e de saída, e definir a divisão treinamento/validação/teste e a normalização (Min-Max ou Z-score).
-  Na classificação, as classes do rótulo são contadas na hora.
+  As colunas são conferidas na hora (ex.: saída de texto numa regressão), com correção rápida, e na
+  classificação as classes do rótulo são contadas antes de a rede existir.
 - **Arquitetura:** entradas e saídas no modo **automático** (vindas do CSV) ou **personalizado**, camadas
   ocultas (neurônios e função de ativação), ativação da saída e semente. Ao criar a rede, os dados já
   são carregados, divididos e normalizados; se algo não bater, o erro aparece na mesma tela.
@@ -26,6 +27,7 @@ Ao abrir, a aplicação pergunta como começar. Os dois modos têm um botão par
 - **Previsão:** calcular a saída da rede para novos valores de entrada.
 - **Salvar modelo** em JSON e **usar modelo como base**: preenche o formulário com a configuração de um
   modelo salvo (tarefa, camadas, ativações, colunas e normalização), sem reaproveitar os pesos.
+- **Reiniciar tudo** (com confirmação): apaga rede, CSV, configurações e resultados e volta para a aba Dados.
 
 **Usar modelo existente**
 

@@ -33,6 +33,7 @@ class AppState:
     input_cols: list[str] = field(default_factory=list)  # seleção atual
     output_cols: list[str] = field(default_factory=list)
     class_labels_preview: list[str] = field(default_factory=list)  # classes contadas no CSV
+    selection_problem: str | None = None  # por que a seleção não serve (ex.: saída de texto na regressão)
     data_dirty: bool = False  # escolhas mudaram depois de aplicadas à rede
 
     # Dados aplicados à rede (backend)
@@ -90,7 +91,7 @@ class AppState:
 
     def suggested_io(self) -> tuple[int, int] | None:
         """Entradas e neurônios de saída que o CSV escolhido pede (modo "Automático")."""
-        if not self.data_selection_ready:
+        if not self.data_selection_ready or self.selection_problem:
             return None
         n_in = len(self.input_cols)
         if self.task_choice == "classification":
@@ -207,6 +208,7 @@ class AppState:
         self.columns = list(columns)
         self.input_cols, self.output_cols = [], []
         self.class_labels_preview = []
+        self.selection_problem = None
         self.mark_data_dirty()
 
     def mark_data_dirty(self) -> None:

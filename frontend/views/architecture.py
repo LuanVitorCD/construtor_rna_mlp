@@ -85,8 +85,6 @@ class ArchitectureView:
         self.n_outputs = number_field("Neurônios de saída", "", integer=True, width=180,
                                       on_change=self._on_draft_change)
         self.io_message = Message()
-        self.go_data_btn = ft.TextButton("Ir para a aba Dados", icon=ft.Icons.ARROW_BACK,
-                                         on_click=lambda _e: self.ctx.navigate(0))
 
         # --- camadas ocultas
         self.hidden_rows: list[_HiddenRow] = []
@@ -127,7 +125,6 @@ class ArchitectureView:
                         ft.Row([self.n_inputs, self.n_outputs], wrap=True, spacing=12,
                                vertical_alignment=ft.CrossAxisAlignment.START),
                         self.io_message.root,
-                        ft.Row([self.go_data_btn]),
                         learn_more("Automático ou personalizado?", HELP["io_auto"] + "\n\n" + HELP["io_custom"]),
                     ],
                     icon=ft.Icons.INPUT,
@@ -236,7 +233,6 @@ class ArchitectureView:
             field.read_only = auto
             field.filled = auto
             field.fill_color = C.SURFACE_CONTAINER_HIGH if auto else None
-        self.go_data_btn.visible = suggestion is None
         if auto:
             if suggestion:
                 self.n_inputs.value, self.n_outputs.value = str(suggestion[0]), str(suggestion[1])
@@ -247,9 +243,15 @@ class ArchitectureView:
                                      f"saída = {', '.join(state.output_cols)}.")
             else:
                 self.n_inputs.value = self.n_outputs.value = ""
-                self.io_message.show("info", "Escolha os dados primeiro",
-                                     "Na aba Dados, escolha o CSV e marque as colunas de entrada e de saída "
-                                     "(e a tarefa). Ou use o modo Personalizado.")
+                if state.selection_problem:  # ex.: saída de texto com a tarefa Regressão
+                    self.io_message.show("error", "Os dados escolhidos têm um problema",
+                                         state.selection_problem + " Corrija na aba Dados.",
+                                         action=("Ir para a aba Dados", lambda _e: self.ctx.navigate(0)))
+                else:
+                    self.io_message.show("info", "Escolha os dados primeiro",
+                                         "Na aba Dados, escolha o CSV e marque as colunas de entrada e de saída "
+                                         "(e a tarefa). Ou use o modo Personalizado.",
+                                         action=("Ir para a aba Dados", lambda _e: self.ctx.navigate(0)))
             return
         if not suggestion:
             self.io_message.show("info", "Sem dados escolhidos",
@@ -321,6 +323,8 @@ class ArchitectureView:
         draft = self._draft(strict=False)
         if draft is None:
             self.param_count.value = ""
+            self.diagram.clear("O diagrama aparece quando o nº de entradas e de neurônios de saída "
+                               "estiver definido (e os demais campos forem números válidos).")
             return
         n_in, layers, _seed = draft
         n_params = count_parameters(n_in, [l["neurons"] for l in layers])
@@ -378,7 +382,8 @@ class ArchitectureView:
         else:
             self.message.show(
                 "error", "Rede criada, mas os dados não foram aplicados",
-                f"{error} Use o modo Automático (ou corrija os números) e crie a rede de novo.")
+                f"{error} Use o modo Automático (ou corrija os números) e crie a rede de novo.",
+                action=("Ir para a aba Dados", lambda _e: self.ctx.navigate(0)))
         state.notify()
 
     # ------------------------------------------------------------- modelo base
