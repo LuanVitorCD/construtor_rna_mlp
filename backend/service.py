@@ -85,6 +85,12 @@ class MLPService:
             "n_outputs": int(self.network.n_outputs),
             "total_parameters": int(total_params),
             "layers": layers_info,
+            "normalization": self.norm_kind,
+            "meta": {
+                "input_cols": list(self.meta["input_cols"]) if self.meta.get("input_cols") is not None else None,
+                "output_cols": list(self.meta["output_cols"]) if self.meta.get("output_cols") is not None else None,
+                "class_labels": list(self.meta["class_labels"]) if self.meta.get("class_labels") is not None else None,
+            },
         }
 
     # ---------- Dados e Pré-processamento ----------
@@ -128,7 +134,7 @@ class MLPService:
         self.meta["output_cols"] = list(output_cols)
 
         preview_rows = min(5, len(ds))
-        return {
+        result: dict = {
             "rows": int(len(ds)),
             "inputs": list(input_cols),
             "outputs": list(output_cols),
@@ -140,6 +146,10 @@ class MLPService:
                 for i in range(preview_rows)
             ],
         }
+        if is_classification and self.encoder is not None:
+            result["classes"] = list(self.encoder.classes_)
+
+        return result
 
     def split_dataset(
         self,
@@ -236,12 +246,24 @@ class MLPService:
         if len(target_ds) == 0:
             raise DatasetError(f"O subconjunto '{subset}' está vazio.")
 
+        preds = np.array([self.network.forward(x) for x in target_ds.X], dtype=float)
         mse_val = evaluate_mse(self.network, target_ds.X, target_ds.Y)
-        result: dict = {"subset": subset, "mse": float(mse_val)}
 
-        if self.task == "classification" and self.encoder is not None:
+        result: dict = {
+            "subset": subset,
+            "n_samples": int(len(target_ds)),
+            "mse": float(mse_val),
+        }
+
+        if self.task == "regression":
+            var_y = float(np.mean(np.var(target_ds.Y, axis=0)))
+            r2_val = float(1.0 - (mse_val / var_y)) if var_y > 0.0 else 0.0
+            result["r2"] = r2_val
+            result["y_true"] = target_ds.Y.tolist()
+            result["y_pred"] = preds.tolist()
+        elif self.task == "classification" and self.encoder is not None:
             y_true_labels = [self.encoder.decode(y) for y in target_ds.Y]
-            y_pred_labels = [self.encoder.decode(self.network.forward(x)) for x in target_ds.X]
+            y_pred_labels = [self.encoder.decode(p) for p in preds]
             cm = confusion_matrix(y_true_labels, y_pred_labels, self.encoder.classes_)
             result["accuracy"] = float(accuracy(y_true_labels, y_pred_labels))
             result["classes"] = list(self.encoder.classes_)
