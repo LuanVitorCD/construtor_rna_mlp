@@ -70,6 +70,16 @@ def test_criar_modelo_de_regressao_ponta_a_ponta(csv_regressao, tmp_path):
         await ev._on_evaluate_all(None)
         assert set(state.evaluations) == {"train", "val", "test"}
         assert ev.message.level == "success"
+        # R² da tela = 1 − SQ_res/SQ_tot calculado aqui com as previsões da própria rede do backend
+        service = gateway.service
+        test = service.split.test
+        y = [float(row[0]) for row in test.Y]
+        y_hat = [float(service.network.forward(x)[0]) for x in test.X]
+        mean = sum(y) / len(y)
+        ss_res = sum((a - b) ** 2 for a, b in zip(y, y_hat))
+        ss_tot = sum((a - mean) ** 2 for a in y)
+        assert state.evaluations["test"]["r2"] == pytest.approx(1 - ss_res / ss_tot)
+        assert [c.label.value for c in ev.summary_holder.content.columns] == ["Subconjunto", "MSE", "R²"]
         assert not ev.comparison_section.visible and not ev.confusion_section.visible
 
         pred.paste.value = "100; 2; 10"

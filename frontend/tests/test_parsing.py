@@ -2,6 +2,7 @@ import pytest
 
 from frontend.parsing import (
     ParseError,
+    format_fixed,
     format_number,
     format_percent,
     parse_float,
@@ -79,3 +80,10 @@ def test_format_number_padrao_brasileiro():
 def test_to_input_text_pode_ser_relido():
     for v in (0.1, 2.0, 1e-5, -3.25):
         assert parse_float(to_input_text(v), field="x") == pytest.approx(v)
+
+
+def test_format_fixed_para_r2():
+    assert format_fixed(0.89912) == "0,899"
+    assert format_fixed(-0.0111) == "−0,011"
+    assert format_fixed(-2.42e-6) == "0,000"  # sem "−0,000"
+    assert format_fixed(None) == "—" and format_fixed(float("nan")) == "—"

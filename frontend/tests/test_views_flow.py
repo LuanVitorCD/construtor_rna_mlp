@@ -69,7 +69,13 @@ def test_fluxo_completo_de_regressao_csv_primeiro(csv_regressao):
         tile_labels = [tile.content.label for tile in ev.metrics.controls]
         summary_cols = [c.label.value for c in ev.summary_holder.content.columns]
         assert not any("RMSE" in t for t in tile_labels + summary_cols)  # RMSE removido
-        assert summary_cols == ["Subconjunto", "MSE"]
+        assert summary_cols == ["Subconjunto", "MSE", "R²"]  # regressão: R² no lugar de "Acertos"
+        assert any(t.startswith("R²") for t in tile_labels)
+        for subset, result in state.evaluations.items():  # R² = 1 − MSE / Var(y) do subconjunto
+            ys = [row[0] for row in _gw.read_targets(subset)]
+            mean = sum(ys) / len(ys)
+            var = sum((y - mean) ** 2 for y in ys) / len(ys)
+            assert result["r2"] == pytest.approx(1 - result["mse"] / var)
 
         pred.paste.value = "10; 3; 5"
         pred._on_fill(None)
@@ -160,6 +166,8 @@ def test_fluxo_de_classificacao_conta_classes_antes_da_rede(csv_classes):
         await page.tasks[-1]
         await ev._on_evaluate(None)
         assert ev.confusion_section.visible and not ev.comparison_section.visible
+        assert state.evaluations["test"].get("r2") is None  # R² só na regressão
+        assert [c.label.value for c in ev.summary_holder.content.columns] == ["Subconjunto", "MSE", "Acertos"]
         # Matriz: acertos (diagonal) em verde, erros em vermelho, zeros sem cor.
         grid = ev.confusion_holder.controls[0].controls[0].controls  # linhas da grade
         matrix = state.evaluations["test"]["confusion_matrix"]

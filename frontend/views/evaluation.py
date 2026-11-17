@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import flet as ft
 
-from frontend.analysis import column, regression_metrics
+from frontend.analysis import column, r2_from_mse, regression_metrics
 from frontend.components.charts import ComparisonChart
 from frontend.components.ui import (
     Message,
@@ -21,7 +21,7 @@ from frontend.components.ui import (
     section,
 )
 from frontend.context import AppContext, updates_page
-from frontend.parsing import format_number, format_percent
+from frontend.parsing import format_fixed, format_number, format_percent
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP, SUBSET_LABELS
 from frontend.theme import SUCCESS
@@ -78,7 +78,8 @@ class EvaluationView:
                      self.requirements, self.message.root],
                     icon=ft.Icons.ASSESSMENT,
                 ),
-                section("Resultados", [self.metrics, learn_more("O que significa o MSE?", HELP["mse"])],
+                section("Resultados", [self.metrics, learn_more("O que significam MSE e R²?",
+                                                                 HELP["mse"] + "\n\n" + HELP["r2"])],
                         icon=ft.Icons.INSIGHTS),
                 section("Comparação entre subconjuntos", [self.summary_holder], icon=ft.Icons.TABLE_CHART,
                         subtitle="Treinamento muito melhor que validação/teste indica sobreajuste."),
@@ -108,6 +109,10 @@ class EvaluationView:
             self.message.show("error", err.title, err.message)
             return None
         result = dict(result or {})
+        if self.ctx.state.task == "regression" and result.get("r2") is None:
+            # O evaluate() só devolve o MSE: R² = 1 − MSE / Var(y), com y do próprio subconjunto.
+            targets = result.get("y_true") or self.ctx.gateway.read_targets(subset)
+            result["r2"] = r2_from_mse(result.get("mse"), targets)
         self.ctx.state.evaluations[subset] = result
         return result
 
@@ -122,8 +127,10 @@ class EvaluationView:
         if result is None:
             return
         self.current = subset
-        self.message.show("success", f"Avaliação: {SUBSET_LABELS[subset]}",
-                          f"MSE = {format_number(result.get('mse'))}")
+        text = f"MSE = {format_number(result.get('mse'))}"
+        if result.get("r2") is not None:
+            text += f" · R² = {format_fixed(result['r2'])}"
+        self.message.show("success", f"Avaliação: {SUBSET_LABELS[subset]}", text)
         self._render()
 
     @updates_page
@@ -167,13 +174,14 @@ class EvaluationView:
         if "accuracy" in result:
             tiles.append(metric("Taxa de acertos", format_percent(100 * float(result["accuracy"])),
                                 hint="acurácia"))
+        if result.get("r2") is not None:
+            tiles.append(metric("R² (coef. de determinação)", format_fixed(result["r2"]),
+                                hint="1 = perfeito · 0 = igual a prever a média"))
         if state.task != "classification" and result.get("y_true") and result.get("y_pred"):
             extra = regression_metrics(column(result["y_true"], 0), column(result["y_pred"], 0)) \
                 if (state.n_outputs or 1) == 1 else None
             if extra:
                 tiles.append(metric("MAE", format_number(extra["mae"]), hint="erro absoluto médio"))
-                tiles.append(metric("R²", format_number(extra["r2"], 3) if extra["r2"] is not None else "—",
-                                    hint="1 = ajuste perfeito"))
                 if extra["mean_rel_error_pct"] is not None:
                     tiles.append(metric("Erro relativo médio", format_percent(extra["mean_rel_error_pct"], 2)))
         self.metrics.controls = tiles
@@ -255,7 +263,10 @@ class EvaluationView:
             self.summary_holder.content = body("Nenhuma avaliação ainda.")
             return
         has_acc = any("accuracy" in r for r in evals.values())
+        has_r2 = any(r.get("r2") is not None for r in evals.values())
         columns = [ft.DataColumn(ft.Text("Subconjunto")), ft.DataColumn(ft.Text("MSE"), numeric=True)]
+        if has_r2:
+            columns.append(ft.DataColumn(ft.Text("R²"), numeric=True, tooltip="Coeficiente de determinação"))
         if has_acc:
             columns.append(ft.DataColumn(ft.Text("Acertos"), numeric=True))
         rows = []
@@ -265,6 +276,9 @@ class EvaluationView:
                 continue
             cells = [ft.DataCell(ft.Text(SUBSET_LABELS[key])),
                      ft.DataCell(ft.Text(format_number(r.get("mse"))))]
+            if has_r2:
+                r2 = r.get("r2")
+                cells.append(ft.DataCell(ft.Text(format_fixed(r2))))
             if has_acc:
                 acc = r.get("accuracy")
                 cells.append(ft.DataCell(ft.Text(format_percent(100 * acc) if acc is not None else "—")))

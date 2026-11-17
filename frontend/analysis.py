@@ -239,6 +239,31 @@ def regression_metrics(y_true: Sequence[float], y_pred: Sequence[float]) -> dict
     return {"mse": mse, "mae": mae, "r2": r2, "mean_rel_error_pct": rel}
 
 
+def r2_from_mse(mse: float | None, y_true: Sequence[Sequence[float]] | None) -> float | None:
+    """Coeficiente de determinação a partir do MSE e das saídas esperadas.
+
+    R² = 1 − SQ_res / SQ_tot = 1 − MSE / Var(y), com Var = variância populacional
+    (média dos desvios ao quadrado). Com várias saídas, usa a variância média das
+    saídas, que é coerente com o MSE do backend (média sobre amostras e saídas).
+    None quando não dá para calcular (sem dados ou y constante).
+    """
+    if mse is None or not _finite(mse) or not y_true:
+        return None
+    rows = [list(r) if isinstance(r, (list, tuple)) else [r] for r in y_true]
+    n, k = len(rows), len(rows[0])
+    if k == 0 or any(len(r) != k for r in rows):
+        return None
+    variances = []
+    for j in range(k):
+        col = [float(r[j]) for r in rows]
+        mean = sum(col) / n
+        variances.append(sum((v - mean) ** 2 for v in col) / n)
+    var = sum(variances) / k
+    if var <= 0:
+        return None
+    return 1 - mse / var
+
+
 def accuracy_from_confusion(matrix: Sequence[Sequence[int]]) -> float | None:
     total = sum(sum(row) for row in matrix)
     if not total:

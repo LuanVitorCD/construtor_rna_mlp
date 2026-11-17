@@ -118,6 +118,12 @@ HELP = {
         "MSE = (1/N) · Σ (y − ŷ)²: a média dos erros ao quadrado entre a saída esperada (y) e a "
         "saída prevista pela rede (ŷ). Quanto menor, melhor."
     ),
+    "r2": (
+        "R² (coeficiente de determinação, só na regressão) = 1 − MSE / variância de y: a fração da "
+        "variação da saída explicada pela rede. 1 = previsão perfeita; 0 = tão bom quanto prever "
+        "sempre a média; negativo = pior que a média. Por não depender da escala da saída, ajuda a "
+        "comparar resultados de datasets diferentes."
+    ),
     "test": (
         "Use o conjunto de teste só na avaliação final, depois de escolher arquitetura e "
         "hiperparâmetros. O erro de validação tende a subestimar o erro real (Goodfellow, cap. 5)."

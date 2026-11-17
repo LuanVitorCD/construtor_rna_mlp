@@ -128,6 +128,16 @@ def format_number(value: float | int | None, digits: int = 4) -> str:
     return text.replace(".", ",").replace("-", "−")
 
 
+def format_fixed(value: float | None, decimals: int = 3) -> str:
+    """Casas decimais fixas no padrão brasileiro (ex.: R² = "0,899"; nunca "−0,000")."""
+    if value is None or not math.isfinite(value):
+        return "—"
+    text = f"{value:.{decimals}f}"
+    if float(text) == 0:
+        text = text.lstrip("-")
+    return text.replace(".", ",").replace("-", "−")
+
+
 def format_percent(value: float | None, digits: int = 1) -> str:
     if value is None:
         return "—"

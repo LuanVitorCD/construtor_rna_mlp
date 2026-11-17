@@ -16,6 +16,7 @@ import math
 import random
 import threading
 import time
+from types import SimpleNamespace
 from typing import Any, Callable
 
 ACTIVATIONS = ["linear", "sigmoid", "tanh", "relu"]
@@ -55,7 +56,9 @@ class DemoService:
     def _reset_data(self) -> None:
         self.raw_rows: list[dict[str, str]] | None = None
         self.dataset: dict | None = None
-        self.split: dict[str, list[int]] | None = None
+        self._split_idx: dict[str, list[int]] | None = None
+        # Mesmo formato do MLPService: split.train/.val/.test com .Y (saídas sem normalização)
+        self.split: SimpleNamespace | None = None
         self.norm_kind: str | None = None
         self.history: list[dict] = []
         self.classes: list[str] | None = None
@@ -163,7 +166,7 @@ class DemoService:
         self.dataset = {"inputs": list(input_cols), "outputs": list(output_cols)}
         self.meta = {"input_cols": list(input_cols), "output_cols": list(output_cols),
                      "class_labels": self.classes}
-        self.split = None
+        self.split = self._split_idx = None
         self.norm_kind = None
         self.history = []
         targets = self._encode([r for r in rows[:5]])
@@ -185,9 +188,10 @@ class DemoService:
         n_tr, n_va = round(n * train_pct / 100), round(n * val_pct / 100)
         if n_tr == 0 or n_va == 0:
             raise DatasetError("Treinamento e validação não podem ficar vazios.")
-        self.split = {"train": idx[:n_tr], "val": idx[n_tr:n_tr + n_va], "test": idx[n_tr + n_va:]}
+        self._split_idx = {"train": idx[:n_tr], "val": idx[n_tr:n_tr + n_va], "test": idx[n_tr + n_va:]}
+        self.split = SimpleNamespace(**{k: SimpleNamespace(Y=self._targets(k)) for k in self._split_idx})
         self.history = []  # como no MLPService, a normalização atual (norm_kind) é reaplicada
-        return {k: len(v) for k, v in self.split.items()}
+        return {k: len(v) for k, v in self._split_idx.items()}
 
     def set_normalization(self, kind: str | None) -> dict:
         if self.split is None:
@@ -252,8 +256,8 @@ class DemoService:
 
     # --------------------------------------------------------- avaliação/uso
     def _targets(self, subset: str) -> list[list[float]]:
-        assert self.raw_rows is not None and self.split is not None
-        return self._encode([self.raw_rows[i] for i in self.split[subset]])
+        assert self.raw_rows is not None and self._split_idx is not None
+        return self._encode([self.raw_rows[i] for i in self._split_idx[subset]])
 
     def _encode(self, rows: list[dict[str, str]]) -> list[list[float]]:
         """Saídas esperadas como o MLPService guarda: floats; classes em 0/1 ou one-hot."""
@@ -273,7 +277,7 @@ class DemoService:
         self._require_network()
         if self.split is None:
             raise StateError("Divida o dataset antes de avaliar.")
-        if subset not in self.split:
+        if subset not in (self._split_idx or {}):
             raise ConfigError(f"Subconjunto desconhecido: {subset}")
         y_true = self._targets(subset)
         if not y_true:

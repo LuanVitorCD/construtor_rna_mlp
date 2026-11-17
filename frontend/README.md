@@ -21,7 +21,8 @@ Ao abrir, a aplicação pergunta como começar. Os dois modos têm um botão par
   são carregados, divididos e normalizados; se algo não bater, o erro aparece na mesma tela.
 - **Treinamento:** definir épocas e taxa de aprendizagem (η) e acompanhar ao vivo a curva do MSE de
   treinamento e de validação. A tela marca a melhor época, avisa sobre sobreajuste e exporta o histórico em CSV.
-- **Avaliação:** MSE por subconjunto. Na classificação, também acurácia e matriz de confusão.
+- **Avaliação:** MSE por subconjunto e, na regressão, o coeficiente de determinação (R²). Na
+  classificação, também acurácia e matriz de confusão.
 - **Previsão:** calcular a saída da rede para novos valores de entrada.
 - **Salvar modelo** em JSON e **usar modelo como base**: preenche o formulário com a configuração de um
   modelo salvo (tarefa, camadas, ativações, colunas e normalização), sem reaproveitar os pesos.

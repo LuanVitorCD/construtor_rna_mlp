@@ -81,6 +81,22 @@ class ServiceGateway:
             kind = getattr(self.service, "norm_kind", None)
             return kind if kind in ("minmax", "zscore") else None
 
+    def read_targets(self, subset: str) -> list[list[float]] | None:
+        """Saídas esperadas (y) de um subconjunto, lidas de ``service.split`` (não normalizadas).
+
+        Usado para o R² da regressão (o evaluate() só devolve o MSE). None se indisponível.
+        """
+        with self._lock:
+            split = getattr(self.service, "split", None)
+            dataset = getattr(split, subset, None) if split is not None else None
+            targets = getattr(dataset, "Y", None)
+            if targets is None:
+                return None
+            try:
+                return [[float(v) for v in (row if hasattr(row, "__len__") else [row])] for row in targets]
+            except (TypeError, ValueError):
+                return None
+
 
 def create_gateway() -> ServiceGateway:
     if os.environ.get("MLP_FRONTEND_DEMO") != "1":

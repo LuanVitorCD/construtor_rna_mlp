@@ -9,6 +9,7 @@ from frontend.analysis import (
     downsample_indices,
     flatten,
     output_activation_warning,
+    r2_from_mse,
     regression_metrics,
     samples_per_parameter,
     suggest_hidden_neurons,
@@ -105,3 +106,20 @@ def test_samples_per_parameter():
     assert samples_per_parameter(50, 13).level == "warning"
     assert samples_per_parameter(500, 13).level == "info"
     assert samples_per_parameter(None, 13) is None
+
+
+def test_r2_a_partir_do_mse_bate_com_o_calculo_direto():
+    y_true, y_pred = [1.0, 2.0, 3.0, 4.0], [1.1, 1.8, 3.3, 3.9]
+    mse = sum((t - p) ** 2 for t, p in zip(y_true, y_pred)) / 4
+    direct = regression_metrics(y_true, y_pred)["r2"]
+    assert r2_from_mse(mse, [[v] for v in y_true]) == pytest.approx(direct)
+    assert r2_from_mse(mse, y_true) == pytest.approx(direct)  # lista simples também
+
+
+def test_r2_varias_saidas_e_casos_sem_r2():
+    y = [[0.0, 10.0], [2.0, 30.0]]  # variâncias 1 e 100 -> média 50,5
+    assert r2_from_mse(5.05, y) == pytest.approx(0.9)
+    assert r2_from_mse(0.0, [[1.0], [2.0]]) == 1.0
+    assert r2_from_mse(2.0, [[1.0], [3.0]]) == pytest.approx(-1.0)  # pior que prever a média
+    assert r2_from_mse(1.0, [[5.0], [5.0]]) is None  # y constante
+    assert r2_from_mse(None, [[1.0]]) is None and r2_from_mse(1.0, []) is None
