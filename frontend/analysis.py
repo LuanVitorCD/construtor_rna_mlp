@@ -219,26 +219,6 @@ def column(values: Any, index: int) -> list[float]:
     return out
 
 
-def regression_metrics(y_true: Sequence[float], y_pred: Sequence[float]) -> dict[str, float | None]:
-    """MSE, MAE, R² e erro relativo médio (%), calculados a partir das listas."""
-    n = len(y_true)
-    if n == 0 or n != len(y_pred):
-        return {}
-    errors = [t - p for t, p in zip(y_true, y_pred)]
-    mse = sum(e * e for e in errors) / n
-    mae = sum(abs(e) for e in errors) / n
-    mean_true = sum(y_true) / n
-    ss_tot = sum((t - mean_true) ** 2 for t in y_true)
-    r2 = 1 - (mse * n) / ss_tot if ss_tot > 0 else None
-    nonzero = [(t, p) for t, p in zip(y_true, y_pred) if abs(t) > 1e-12]
-    rel = (
-        100 * sum(abs(t - p) / abs(t) for t, p in nonzero) / len(nonzero)
-        if len(nonzero) == n
-        else None  # indefinido quando há alvos iguais a zero
-    )
-    return {"mse": mse, "mae": mae, "r2": r2, "mean_rel_error_pct": rel}
-
-
 def r2_from_mse(mse: float | None, y_true: Sequence[Sequence[float]] | None) -> float | None:
     """Coeficiente de determinação a partir do MSE e das saídas esperadas.
 

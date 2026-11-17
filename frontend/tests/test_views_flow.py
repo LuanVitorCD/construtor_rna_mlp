@@ -64,15 +64,16 @@ def test_fluxo_completo_de_regressao_csv_primeiro(csv_regressao):
 
         await ev._on_evaluate_all(None)
         assert set(state.evaluations) == {"train", "val", "test"}
-        assert not ev.comparison_section.visible  # o service não devolve y_true/y_pred
+        assert ev.comparison_section.visible  # o evaluate devolve y_true/y_pred: gráfico desejado × estimado
         assert not ev.confusion_section.visible  # regressão: sem matriz
         tile_labels = [tile.content.label for tile in ev.metrics.controls]
         summary_cols = [c.label.value for c in ev.summary_holder.content.columns]
-        assert not any("RMSE" in t for t in tile_labels + summary_cols)  # RMSE removido
+        # Só métricas vistas em aula: nada de RMSE, MAE ou erro relativo
+        assert [t.split(":")[0] for t in tile_labels] == ["MSE", "Amostras", "R² (coef. de determinação)"]
         assert summary_cols == ["Subconjunto", "MSE", "R²"]  # regressão: R² no lugar de "Acertos"
-        assert any(t.startswith("R²") for t in tile_labels)
         for subset, result in state.evaluations.items():  # R² = 1 − MSE / Var(y) do subconjunto
-            ys = [row[0] for row in _gw.read_targets(subset)]
+            assert result["n_samples"] == state.split_size(subset) == len(result["y_true"])
+            ys = [row[0] for row in result["y_true"]]
             mean = sum(ys) / len(ys)
             var = sum((y - mean) ** 2 for y in ys) / len(ys)
             assert result["r2"] == pytest.approx(1 - result["mse"] / var)
@@ -216,25 +217,23 @@ def test_trocar_tarefa_depois_de_criar_pede_para_recriar(csv_regressao):
     asyncio.run(flow())
 
 
-def test_grafico_desejado_estimado_aparece_se_o_service_devolver_y(csv_regressao):
-    """Extensão opcional: com y_true/y_pred no evaluate, a aba mostra o gráfico e MAE/R²."""
+def test_grafico_desejado_estimado_com_duas_saidas(tmp_path):
+    """Com várias saídas, o gráfico desejado × estimado mostra uma saída por vez (seletor)."""
     async def flow():
-        _state, _page, views, _toasts, gateway = build_app()
+        path = tmp_path / "duas.csv"
+        path.write_text("x1,x2,y1,y2\n" + "\n".join(f"{i},{i % 4},{2 * i},{i % 9}" for i in range(50)),
+                        encoding="utf-8")
+        _state, _page, views, _toasts, _gateway = build_app()
         data, arch, _train, ev, _pred = views
-        original = gateway.service.evaluate
-
-        def evaluate_with_y(subset="test"):
-            result = original(subset)
-            result.update(y_true=[[1.0], [2.0], [3.0]], y_pred=[[1.1], [1.9], [3.2]])
-            return result
-
-        gateway.service.evaluate = evaluate_with_y
-        await data.open_csv(csv_regressao)
+        await data.open_csv(str(path))
+        data._on_role_change("y1", ["out"])
         await arch._on_create(None)
         await ev._on_evaluate(None)
-        assert ev.comparison_section.visible
-        labels = [tile.content.label for tile in ev.metrics.controls]
-        assert any(label.startswith("R²") for label in labels)
+        assert ev.comparison_section.visible and ev.output_select.visible
+        assert [o.text for o in ev.output_select.options] == ["y1", "y2"]
+        ev.output_select.value = "1"
+        ev._on_output_change(None)
+        assert "y2" in ev.comparison._semantics.label
 
     asyncio.run(flow())
 

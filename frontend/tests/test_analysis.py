@@ -10,7 +10,6 @@ from frontend.analysis import (
     flatten,
     output_activation_warning,
     r2_from_mse,
-    regression_metrics,
     samples_per_parameter,
     suggest_hidden_neurons,
     suggest_output_neurons,
@@ -79,17 +78,6 @@ def test_downsample_mantem_extremos_e_indice_pedido():
     assert downsample_indices(5, 400) == [0, 1, 2, 3, 4]
 
 
-def test_regression_metrics():
-    m = regression_metrics([1.0, 2.0, 3.0], [1.0, 2.0, 5.0])
-    assert m["mse"] == pytest.approx(4 / 3)
-    assert "rmse" not in m  # RMSE fora da interface (não visto em aula)
-    assert m["mae"] == pytest.approx(2 / 3)
-    assert m["r2"] == pytest.approx(1 - 4 / 2)
-    assert m["mean_rel_error_pct"] == pytest.approx(100 * (2 / 3) / 3)
-    assert regression_metrics([0.0, 1.0], [0.0, 1.0])["mean_rel_error_pct"] is None
-    assert regression_metrics([], []) == {}
-
-
 def test_column_e_flatten_aceitam_listas_de_listas():
     y = [[1, 10], [2, 20]]
     assert column(y, 1) == [10.0, 20.0]
@@ -111,7 +99,8 @@ def test_samples_per_parameter():
 def test_r2_a_partir_do_mse_bate_com_o_calculo_direto():
     y_true, y_pred = [1.0, 2.0, 3.0, 4.0], [1.1, 1.8, 3.3, 3.9]
     mse = sum((t - p) ** 2 for t, p in zip(y_true, y_pred)) / 4
-    direct = regression_metrics(y_true, y_pred)["r2"]
+    mean = sum(y_true) / 4
+    direct = 1 - sum((t - p) ** 2 for t, p in zip(y_true, y_pred)) / sum((t - mean) ** 2 for t in y_true)
     assert r2_from_mse(mse, [[v] for v in y_true]) == pytest.approx(direct)
     assert r2_from_mse(mse, y_true) == pytest.approx(direct)  # lista simples também
 

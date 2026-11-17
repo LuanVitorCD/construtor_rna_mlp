@@ -33,12 +33,10 @@ class ModelInfo:
 
 async def read_model(gateway: ServiceGateway, path: str) -> ModelInfo:
     """Carrega o JSON no service e lê tudo o que a UI precisa (GatewayError se falhar)."""
-    await gateway.call("load", path)
-    description = dict(await gateway.call("describe_network") or {})
-    # describe_network() não traz `meta`: nomes das colunas e rótulos vêm do atributo do service.
-    meta = description.get("meta") or gateway.read_meta()
-    return ModelInfo(path=path, description=description, meta=dict(meta or {}),
-                     normalization=gateway.read_norm_kind())
+    description = dict(await gateway.call("load", path) or {})  # load() devolve describe_network()
+    meta = {k: v for k, v in (description.get("meta") or {}).items() if v is not None}
+    return ModelInfo(path=path, description=description, meta=meta,
+                     normalization=description.get("normalization"))
 
 
 def apply_loaded_model(state: AppState, info: ModelInfo) -> None:

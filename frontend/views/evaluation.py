@@ -1,16 +1,16 @@
 """Aba 4: avaliação nos subconjuntos (MSE do teste ao final, como pede o enunciado).
 
-Métricas sempre presentes (contrato do service): MSE; na classificação, também
-acurácia e matriz de confusão.
-Se o backend também devolver ``y_true``/``y_pred`` (extensão opcional), a tela mostra
-MAE, R², erro relativo médio e o gráfico "desejado × estimado" (Ivan Nunes, cap. 5).
+Métricas devolvidas pelo ``MLPService.evaluate``: MSE e nº de amostras; na regressão,
+R² e as saídas desejadas/estimadas (``y_true``/``y_pred``) para o gráfico "desejado ×
+estimado" (Ivan Nunes, cap. 5); na classificação, acurácia e matriz de confusão.
+Só aparecem as métricas vistas em aula (MSE, R², acurácia).
 """
 
 from __future__ import annotations
 
 import flet as ft
 
-from frontend.analysis import column, r2_from_mse, regression_metrics
+from frontend.analysis import column
 from frontend.components.charts import ComparisonChart
 from frontend.components.ui import (
     Message,
@@ -109,10 +109,6 @@ class EvaluationView:
             self.message.show("error", err.title, err.message)
             return None
         result = dict(result or {})
-        if self.ctx.state.task == "regression" and result.get("r2") is None:
-            # O evaluate() só devolve o MSE: R² = 1 − MSE / Var(y), com y do próprio subconjunto.
-            targets = result.get("y_true") or self.ctx.gateway.read_targets(subset)
-            result["r2"] = r2_from_mse(result.get("mse"), targets)
         self.ctx.state.evaluations[subset] = result
         return result
 
@@ -177,13 +173,6 @@ class EvaluationView:
         if result.get("r2") is not None:
             tiles.append(metric("R² (coef. de determinação)", format_fixed(result["r2"]),
                                 hint="1 = perfeito · 0 = igual a prever a média"))
-        if state.task != "classification" and result.get("y_true") and result.get("y_pred"):
-            extra = regression_metrics(column(result["y_true"], 0), column(result["y_pred"], 0)) \
-                if (state.n_outputs or 1) == 1 else None
-            if extra:
-                tiles.append(metric("MAE", format_number(extra["mae"]), hint="erro absoluto médio"))
-                if extra["mean_rel_error_pct"] is not None:
-                    tiles.append(metric("Erro relativo médio", format_percent(extra["mean_rel_error_pct"], 2)))
         self.metrics.controls = tiles
         self._render_comparison()
         self._render_confusion(result)

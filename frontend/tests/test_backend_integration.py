@@ -58,7 +58,8 @@ def test_criar_modelo_de_regressao_ponta_a_ponta(csv_regressao, tmp_path):
         assert state.data_ready and state.dataset["rows"] == 80
         assert table_rows(data)[0] == ["40", "1", "0", "100"]  # prévia {"x","y"} do backend
         assert (state.split_size("train"), state.split_size("val"), state.split_size("test")) == (56, 12, 12)
-        assert state.normalization == "zscore" and gateway.read_norm_kind() == "zscore"
+        assert state.normalization == "zscore"
+        assert (await gateway.call("describe_network"))["normalization"] == "zscore"
 
         train.epochs.value, train.lr.value, train.shuffle_seed.value = "15", "0,01", "1"
         await train._on_start(None)
@@ -78,9 +79,11 @@ def test_criar_modelo_de_regressao_ponta_a_ponta(csv_regressao, tmp_path):
         mean = sum(y) / len(y)
         ss_res = sum((a - b) ** 2 for a, b in zip(y, y_hat))
         ss_tot = sum((a - mean) ** 2 for a in y)
-        assert state.evaluations["test"]["r2"] == pytest.approx(1 - ss_res / ss_tot)
+        result = state.evaluations["test"]
+        assert result["r2"] == pytest.approx(1 - ss_res / ss_tot)  # R² que o backend devolve
+        assert result["n_samples"] == 12 and [r[0] for r in result["y_pred"]] == pytest.approx(y_hat)
         assert [c.label.value for c in ev.summary_holder.content.columns] == ["Subconjunto", "MSE", "R²"]
-        assert not ev.comparison_section.visible and not ev.confusion_section.visible
+        assert ev.comparison_section.visible and not ev.confusion_section.visible  # gráfico desejado × estimado
 
         pred.paste.value = "100; 2; 10"
         pred._on_fill(None)
@@ -223,3 +226,30 @@ def test_previsao_por_csv_com_modelo_salvo(csv_regressao, tmp_path):
         assert panel.comparison["r2"] == pytest.approx(1 - mse / var)
 
     asyncio.run(flow())
+
+
+@pytest.mark.parametrize("task", ["regression", "classification"])
+def test_demo_service_devolve_as_mesmas_chaves_do_backend(task, csv_regressao, csv_classes, tmp_path):
+    """O modo demonstração precisa ter o mesmo contrato do MLPService (mesmas chaves)."""
+    from frontend.demo_service import DemoService
+
+    path, n_in, n_out = (csv_regressao, 3, 1) if task == "regression" else (csv_classes, 2, 3)
+    ins, outs = (["area", "quartos", "idade"], ["preco"]) if task == "regression" else (["a", "b"], ["especie"])
+    keys = []
+    for svc in (service_module.MLPService(), DemoService()):
+        got = {}
+        layers = [{"neurons": 3, "activation": "tanh"}, {"neurons": n_out, "activation": "sigmoid"}]
+        got["create"] = svc.create_network(n_in, layers, seed=1, task=task)
+        got["load_dataset"] = svc.load_dataset(path, ins, outs)
+        got["split"] = svc.split_dataset(70, 15, 15, seed=1)
+        got["norm"] = svc.set_normalization("minmax")
+        got["describe"] = svc.describe_network()
+        got["evaluate"] = svc.evaluate("test")
+        got["predict"] = svc.predict([1.0] * n_in)
+        model = str(tmp_path / f"{type(svc).__name__}.json")
+        svc.save(model)
+        got["load"] = svc.load(model)
+        keys.append({name: sorted(value) for name, value in got.items()})
+        keys[-1]["describe.meta"] = sorted(got["describe"]["meta"])
+        keys[-1]["preview"] = sorted(got["load_dataset"]["preview"][0])
+    assert keys[0] == keys[1]

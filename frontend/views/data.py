@@ -424,11 +424,6 @@ class DataView:
         info = dict(info or {})
         info.setdefault("inputs", ins)
         info.setdefault("outputs", outs)
-        if state.task == "classification" and not info.get("classes"):
-            # O MLPService guarda os rótulos em `meta`, sem devolvê-los em load_dataset.
-            labels = self.ctx.gateway.read_meta().get("class_labels")
-            if labels:
-                info["classes"] = [str(c) for c in labels]
         state.on_dataset_loaded(info)
         state.on_split(dict(sizes or {}))
         state.normalization = kind

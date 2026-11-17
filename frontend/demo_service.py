@@ -3,9 +3,10 @@
 Serve só para abrir e testar a interface sem o backend (``MLP_FRONTEND_DEMO=1``).
 **Não é uma rede neural**: as curvas de erro e as previsões são simuladas.
 A validação de entradas, os erros e os **formatos de retorno são os mesmos do
-``backend/service.py`` real** (ex.: ``describe_network`` com ``n_neurons`` e
-``total_parameters``; prévia ``{"x": [...], "y": [...]}``; rótulos das classes só em
-``meta``), então a UI se comporta igual com os dois.
+``backend/service.py`` real** (ex.: ``describe_network`` com ``n_neurons``,
+``total_parameters``, ``meta`` e ``normalization``; prévia ``{"x": [...], "y": [...]}``
+com ``classes`` na classificação; ``evaluate`` com ``n_samples`` e, na regressão, ``r2``,
+``y_true`` e ``y_pred``), então a UI se comporta igual com os dois.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ import math
 import random
 import threading
 import time
-from types import SimpleNamespace
 from typing import Any, Callable
 
 ACTIVATIONS = ["linear", "sigmoid", "tanh", "relu"]
@@ -57,8 +57,6 @@ class DemoService:
         self.raw_rows: list[dict[str, str]] | None = None
         self.dataset: dict | None = None
         self._split_idx: dict[str, list[int]] | None = None
-        # Mesmo formato do MLPService: split.train/.val/.test com .Y (saídas sem normalização)
-        self.split: SimpleNamespace | None = None
         self.norm_kind: str | None = None
         self.history: list[dict] = []
         self.classes: list[str] | None = None
@@ -105,8 +103,10 @@ class DemoService:
             layers.append({"index": i, "n_inputs": fan_in, "n_neurons": spec["neurons"],
                            "activation": spec["activation"], "parameters": params})
             fan_in = spec["neurons"]
+        meta = {key: (list(self.meta[key]) if self.meta.get(key) is not None else None)
+                for key in ("input_cols", "output_cols", "class_labels")}
         return {"task": self.task, "n_inputs": net["n_inputs"], "n_outputs": fan_in,
-                "total_parameters": total, "layers": layers}
+                "total_parameters": total, "layers": layers, "normalization": self.norm_kind, "meta": meta}
 
     # ------------------------------------------------------------------ dados
     def get_csv_columns(self, path: str) -> list[str]:
@@ -166,15 +166,18 @@ class DemoService:
         self.dataset = {"inputs": list(input_cols), "outputs": list(output_cols)}
         self.meta = {"input_cols": list(input_cols), "output_cols": list(output_cols),
                      "class_labels": self.classes}
-        self.split = self._split_idx = None
+        self._split_idx = None
         self.norm_kind = None
         self.history = []
         targets = self._encode([r for r in rows[:5]])
         # Mesmo formato do MLPService: x/y numéricos; na classificação, y já codificado
-        # e os rótulos das classes ficam só em `meta`.
-        return {"rows": len(rows), "inputs": list(input_cols), "outputs": list(output_cols),
-                "preview": [{"x": [float(r[c]) for c in input_cols], "y": y}
-                            for r, y in zip(rows[:5], targets)]}
+        # e os rótulos das classes em `classes`.
+        result: dict[str, Any] = {"rows": len(rows), "inputs": list(input_cols), "outputs": list(output_cols),
+                                  "preview": [{"x": [float(r[c]) for c in input_cols], "y": y}
+                                              for r, y in zip(rows[:5], targets)]}
+        if self.classes is not None:
+            result["classes"] = list(self.classes)
+        return result
 
     def split_dataset(self, train_pct: float, val_pct: float, test_pct: float,
                       seed: int | None = None) -> dict:
@@ -189,12 +192,11 @@ class DemoService:
         if n_tr == 0 or n_va == 0:
             raise DatasetError("Treinamento e validação não podem ficar vazios.")
         self._split_idx = {"train": idx[:n_tr], "val": idx[n_tr:n_tr + n_va], "test": idx[n_tr + n_va:]}
-        self.split = SimpleNamespace(**{k: SimpleNamespace(Y=self._targets(k)) for k in self._split_idx})
         self.history = []  # como no MLPService, a normalização atual (norm_kind) é reaplicada
         return {k: len(v) for k, v in self._split_idx.items()}
 
     def set_normalization(self, kind: str | None) -> dict:
-        if self.split is None:
+        if self._split_idx is None:
             raise StateError("Divida o dataset antes de normalizar.")
         if kind not in (None, "minmax", "zscore"):
             raise ConfigError("Normalização desconhecida: " + str(kind))
@@ -206,7 +208,7 @@ class DemoService:
                        on_epoch: Callable[[dict], None] | None = None,
                        on_finish: Callable[[], None] | None = None) -> None:
         self._require_network()
-        if self.split is None:
+        if self._split_idx is None:
             raise StateError("Divida o dataset antes de treinar.")
         if lr <= 0 or epochs < 1:
             raise ConfigError("lr deve ser > 0 e epochs >= 1.")
@@ -275,7 +277,7 @@ class DemoService:
 
     def evaluate(self, subset: str = "test") -> dict:
         self._require_network()
-        if self.split is None:
+        if self._split_idx is None:
             raise StateError("Divida o dataset antes de avaliar.")
         if subset not in (self._split_idx or {}):
             raise ConfigError(f"Subconjunto desconhecido: {subset}")
@@ -288,9 +290,16 @@ class DemoService:
         spread = (max(flat) - min(flat)) or 1.0
         y_pred = [[v + rng.gauss(0, 0.35 * noise * spread) for v in row] for row in y_true]
         mse = sum((t - p) ** 2 for tr, pr in zip(y_true, y_pred) for t, p in zip(tr, pr)) / len(flat)
-        # Mesmas chaves do MLPService.evaluate (sem y_true/y_pred).
-        result: dict[str, Any] = {"subset": subset, "mse": mse}
-        if self.task == "classification":
+        # Mesmas chaves do MLPService.evaluate.
+        result: dict[str, Any] = {"subset": subset, "n_samples": len(y_true), "mse": mse}
+        if self.task == "regression":
+            n, k = len(y_true), len(y_true[0])
+            means = [sum(row[j] for row in y_true) / n for j in range(k)]
+            var = sum(sum((row[j] - means[j]) ** 2 for row in y_true) / n for j in range(k)) / k
+            result["r2"] = 1 - mse / var if var > 0 else 0.0  # como o backend: 0,0 se y é constante
+            result["y_true"] = y_true
+            result["y_pred"] = y_pred
+        else:
             assert self.classes is not None
             k = len(self.classes)
             matrix = [[0] * k for _ in range(k)]

@@ -86,35 +86,6 @@ class ServiceGateway:
         with self._lock:
             self.service = type(self.service)()
 
-    # Leituras somente-leitura de atributos públicos do MLPService que a fachada não devolve
-    # (backend/service.py): rótulos das classes e nomes das colunas (`meta`) e a normalização
-    # ativa (`norm_kind`). Se o atributo não existir, a UI segue com valores padrão.
-    def read_meta(self) -> dict:
-        with self._lock:
-            meta = getattr(self.service, "meta", None)
-            return dict(meta) if isinstance(meta, dict) else {}
-
-    def read_norm_kind(self) -> str | None:
-        with self._lock:
-            kind = getattr(self.service, "norm_kind", None)
-            return kind if kind in ("minmax", "zscore") else None
-
-    def read_targets(self, subset: str) -> list[list[float]] | None:
-        """Saídas esperadas (y) de um subconjunto, lidas de ``service.split`` (não normalizadas).
-
-        Usado para o R² da regressão (o evaluate() só devolve o MSE). None se indisponível.
-        """
-        with self._lock:
-            split = getattr(self.service, "split", None)
-            dataset = getattr(split, subset, None) if split is not None else None
-            targets = getattr(dataset, "Y", None)
-            if targets is None:
-                return None
-            try:
-                return [[float(v) for v in (row if hasattr(row, "__len__") else [row])] for row in targets]
-            except (TypeError, ValueError):
-                return None
-
 
 def create_gateway() -> ServiceGateway:
     if os.environ.get("MLP_FRONTEND_DEMO") != "1":
