@@ -24,7 +24,10 @@ Ao abrir, a aplicação pergunta como começar. Os dois modos têm um botão par
   treinamento e de validação. A tela marca a melhor época, avisa sobre sobreajuste e exporta o histórico em CSV.
 - **Avaliação:** MSE por subconjunto e, na regressão, o coeficiente de determinação (R²). Na
   classificação, também acurácia e matriz de confusão.
-- **Previsão:** calcular a saída da rede para novos valores de entrada.
+- **Previsão:** calcular a saída da rede para novos valores, digitados ou de um **arquivo CSV** (todas as
+  linhas de uma vez). A coluna com a resposta certa pode ficar no arquivo: marcada como "Saída (oculta)",
+  ela não vai para a rede e, se você quiser, aparece ao lado do previsto com MSE e R² (ou taxa de acertos).
+  Os resultados podem ser salvos em CSV.
 - **Salvar modelo** em JSON e **usar modelo como base**: preenche o formulário com a configuração de um
   modelo salvo (tarefa, camadas, ativações, colunas e normalização), sem reaproveitar os pesos.
 - **Reiniciar tudo** (com confirmação): apaga rede, CSV, configurações e resultados e volta para a aba Dados.
@@ -32,7 +35,7 @@ Ao abrir, a aplicação pergunta como começar. Os dois modos têm um botão par
 **Usar modelo existente**
 
 - **Informações do modelo:** arquivo, tarefa, arquitetura (com diagrama), colunas e normalização.
-- **Previsão:** calcular a saída do modelo salvo para novos valores de entrada.
+- **Previsão:** a mesma da criação (valores digitados ou arquivo CSV), com o modelo salvo.
 
 **Acessibilidade:** tema claro e escuro com as cores das logos do curso e contraste WCAG AA, atalhos de
 teclado, e mensagens com ícone e texto (não só cor).

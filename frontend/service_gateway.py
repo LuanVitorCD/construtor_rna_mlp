@@ -32,6 +32,7 @@ class GatewayError(Exception):
         self.title = title
         self.message = message
         self.kind = kind
+        self.row: int | None = None  # linha que falhou, em predict_many
 
 
 class ServiceGateway:
@@ -62,6 +63,23 @@ class ServiceGateway:
 
     async def call(self, method: str, *args: Any, **kwargs: Any) -> Any:
         return await asyncio.to_thread(self.call_sync, method, *args, **kwargs)
+
+    async def predict_many(self, rows: list[list[float]]) -> list[dict]:
+        """``predict`` linha a linha (o service prevê uma por vez), numa única thread.
+
+        Se uma linha falhar, o ``GatewayError`` leva o índice dela em ``row``.
+        """
+        def run() -> list[dict]:
+            results = []
+            for i, values in enumerate(rows):
+                try:
+                    results.append(dict(self.call_sync("predict", values) or {}))
+                except GatewayError as err:
+                    err.row = i
+                    raise
+            return results
+
+        return await asyncio.to_thread(run)
 
     def reset(self) -> None:
         """Começa do zero com um service novo (ao trocar de modo / voltar ao menu)."""

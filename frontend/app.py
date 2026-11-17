@@ -52,13 +52,13 @@ CREATE_STEPS = [
     (ft.Icons.ASSESSMENT_OUTLINED, ft.Icons.ASSESSMENT, "Avaliação",
      "Meça o erro no conjunto de teste (avaliação final) e compare os subconjuntos."),
     (ft.Icons.CALCULATE_OUTLINED, ft.Icons.CALCULATE, "Previsão",
-     "Use a rede em novos valores de entrada."),
+     "Use a rede em novos valores de entrada: digitados ou de um arquivo CSV."),
 ]
 USE_STEPS = [
     (ft.Icons.INFO_OUTLINE, ft.Icons.INFO, "Informações",
      "Arquitetura, colunas e normalização do modelo aberto."),
     (ft.Icons.CALCULATE_OUTLINED, ft.Icons.CALCULATE, "Previsão",
-     "Use o modelo salvo em novos valores de entrada."),
+     "Use o modelo salvo em novos valores de entrada: digitados ou de um arquivo CSV."),
 ]
 
 

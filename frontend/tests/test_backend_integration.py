@@ -187,3 +187,39 @@ def test_erros_do_backend_viram_mensagens(csv_regressao):
         assert not state.training and train.message.title == "Treinamento interrompido"
 
     asyncio.run(flow())
+
+
+def test_previsao_por_csv_com_modelo_salvo(csv_regressao, tmp_path):
+    """Modo "Usar modelo existente" + arquivo CSV: a coluna "preco" fica oculta e só entra na
+    comparação. A normalização do modelo salvo é aplicada pelo backend em cada linha."""
+    async def flow():
+        state, page, views, _toasts, gateway = real_app()
+        data, arch, train, _ev, _pred = views
+        await data.open_csv(csv_regressao)
+        data.norm_group.value = "zscore"
+        await arch._on_create(None)
+        train.epochs.value, train.lr.value = "20", "0,01"
+        await train._on_start(None)
+        await asyncio.wait_for(page.tasks[-1], timeout=60)
+        model = str(tmp_path / "casas.json")
+        await gateway.call("save", model)
+
+        _ustate, _upage, (_info, upred), _ut, ugw = await build_use_app(
+            model, service_module.MLPService(), BackendError)
+        panel = upred.csv_panel
+        await panel.open_csv(csv_regressao)
+        assert panel.plan.input_cols == ["area", "quartos", "idade"] and panel.plan.hidden_cols == ["preco"]
+        await panel._on_predict(None)
+        assert len(panel.outputs) == 80
+        first = await ugw.call("predict", [40.0, 1.0, 0.0])
+        assert panel.outputs[0] == pytest.approx(first["outputs"])
+        panel.compare_switch.value = True
+        panel._on_compare_toggle(None)
+        precos = [100 + 2 * i + (i % 4) * 10 for i in range(80)]
+        mse = sum((p[0] - y) ** 2 for p, y in zip(panel.outputs, precos)) / 80
+        assert panel.comparison["mse"] == pytest.approx(mse)
+        mean = sum(precos) / 80
+        var = sum((y - mean) ** 2 for y in precos) / 80
+        assert panel.comparison["r2"] == pytest.approx(1 - mse / var)
+
+    asyncio.run(flow())

@@ -133,6 +133,16 @@ HELP = {
         "Prefira entradas dentro do domínio dos dados de treino."
     ),
     "predict": "A previsão só faz a propagação direta: os pesos e vieses não mudam.",
+    "predict_csv": (
+        "Cada linha do arquivo vira uma previsão. Só as colunas marcadas como “Entrada” vão para a rede. "
+        "Se o arquivo já tiver a resposta certa, marque essa coluna como “Saída (oculta)”: ela fica "
+        "escondida durante a previsão e, se você quiser, aparece depois ao lado do previsto para comparar. "
+        "Não é preciso apagar a coluna numa planilha."
+    ),
+    "compare_csv": (
+        "A comparação usa a coluna oculta como resposta esperada. É como um conjunto de teste extra: "
+        "se as linhas foram usadas no treinamento, o erro tende a parecer menor do que é de verdade."
+    ),
     "persistence": (
         "O arquivo JSON guarda entradas, camadas, ativações, pesos, vieses e a normalização "
         "(função e parâmetros) para reconstruir a rede com as mesmas saídas."

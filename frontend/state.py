@@ -167,6 +167,22 @@ class AppState:
                 return [str(x) for x in names]
         return [f"ŷ{_subscript(i)}" for i in range(1, n + 1)]
 
+    def model_columns(self) -> tuple[list[str] | None, list[str] | None]:
+        """Nomes das colunas de entrada e de saída do CSV de treino, se conhecidos.
+
+        Na classificação a saída é a coluna do rótulo (1 coluna), não os neurônios.
+        """
+        n_in = self.n_inputs or 0
+        n_out = 1 if self.task == "classification" else (self.n_outputs or 0)
+        sources = (self.dataset or {}, {"inputs": self.loaded_meta.get("input_cols"),
+                                         "outputs": self.loaded_meta.get("output_cols")},
+                   {"inputs": self.input_cols, "outputs": self.output_cols})
+        ins = next(([str(c) for c in s["inputs"]] for s in sources
+                    if s.get("inputs") and len(s["inputs"]) == n_in), None)
+        outs = next(([str(c) for c in s["outputs"]] for s in sources
+                     if s.get("outputs") and len(s["outputs"]) == n_out), None)
+        return ins, outs
+
     def architecture_text(self) -> str:
         if not self.network:
             return "—"

@@ -1,4 +1,8 @@
-"""Aba 5: previsão com novos valores de entrada (somente propagação direta)."""
+"""Aba Previsão: novos valores de entrada (somente propagação direta).
+
+Dois jeitos de informar as entradas: digitar uma linha ou abrir um arquivo CSV com várias
+linhas (``CsvPredictionPanel``, que pode esconder a coluna da saída real e comparar).
+"""
 
 from __future__ import annotations
 
@@ -9,9 +13,11 @@ from frontend.context import AppContext, updates_page
 from frontend.parsing import ParseError, format_number, parse_float, parse_values_line, to_input_text
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP
+from frontend.views.prediction_csv import CsvPredictionPanel
 
 C = ft.Colors
 HISTORY_SIZE = 10
+SOURCE_MANUAL, SOURCE_CSV = "manual", "csv"
 
 
 class PredictionView:
@@ -71,10 +77,33 @@ class PredictionView:
             spacing=16,
             col={"xs": 12, "lg": 6},
         )
-        self.root = ft.ResponsiveRow([left, right], spacing=16, run_spacing=16)
+        self.manual_root = ft.ResponsiveRow([left, right], spacing=16, run_spacing=16)
+        self.csv_panel = CsvPredictionPanel(ctx)
+        self.source = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value=SOURCE_MANUAL, label=ft.Text("Digitar valores"), icon=ft.Icon(ft.Icons.KEYBOARD)),
+                ft.Segment(value=SOURCE_CSV, label=ft.Text("Arquivo CSV (várias linhas)"),
+                           icon=ft.Icon(ft.Icons.UPLOAD_FILE)),
+            ],
+            selected=[SOURCE_MANUAL],
+            allow_empty_selection=False,
+            on_change=self._on_source_change,
+        )
+        self.root = ft.Column([ft.Row([self.source], wrap=True), self.manual_root, self.csv_panel.root], spacing=16)
+        self._on_source_change(None)
         self.result_holder.controls = [body("Preencha as entradas e clique em “Prever”.")]
         self.history_holder.content = body("Nenhuma previsão ainda.")
         self.refresh()
+
+    # ------------------------------------------------------------------ origem
+    def _on_source_change(self, _e) -> None:
+        csv_mode = (self.source.selected or [SOURCE_MANUAL])[0] == SOURCE_CSV
+        self.manual_root.visible = not csv_mode
+        self.csv_panel.root.visible = csv_mode
+
+    def show_csv(self) -> None:
+        self.source.selected = [SOURCE_CSV]
+        self._on_source_change(None)
 
     # ----------------------------------------------------------------- campos
     def _rebuild_fields(self) -> None:
@@ -201,8 +230,11 @@ class PredictionView:
 
     # ------------------------------------------------------------------ estado
     def refresh(self) -> None:
+        self.csv_panel.refresh()
         state = self.ctx.state
-        signature = (state.n_inputs, tuple(state.input_names()), state.model_origin, state.model_path)
+        # model_path só conta para modelo aberto (salvar a rede criada não apaga o histórico)
+        loaded_path = state.model_path if state.model_origin == "loaded" else None
+        signature = (state.n_inputs, tuple(state.input_names()), state.model_origin, loaded_path)
         if signature != self._signature:
             self._signature = signature
             self._history = []
