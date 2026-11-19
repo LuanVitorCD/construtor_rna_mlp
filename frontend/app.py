@@ -404,6 +404,10 @@ class AppShell:
             duration=ft.Duration(seconds=6),
         )
         self.page.show_dialog(self._snack)
+        # show_dialog() só atualiza a camada de diálogos, e isso faz o Flet pular a atualização
+        # automática do fim do evento: o que o handler mudou antes do aviso (ex.: os neurônios
+        # do "Sugerir neurônios") não chegava à tela. Atualiza a página inteira.
+        self.page.update()
 
     async def confirm(self, title: str, text: str, confirm_label: str) -> bool:
         future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
