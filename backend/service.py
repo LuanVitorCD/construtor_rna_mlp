@@ -7,7 +7,7 @@ from backend.activations import list_activations
 from backend.classification import LabelEncoder, accuracy, confusion_matrix
 from backend.dataset import Dataset, DataSplit, check_compatibility, load_csv, read_columns, split
 from backend.errors import ConfigError, DatasetError, StateError
-from backend.losses import evaluate_mse
+from backend.losses import mse
 from backend.network import NeuralNetwork
 from backend.normalization import Normalizer, apply_normalization
 from backend.persistence import LoadedModel, load_model, save_model
@@ -21,6 +21,7 @@ class MLPService:
     def __init__(self):
         self.network: NeuralNetwork | None = None
         self.normalizer: Normalizer | None = None
+        self.y_normalizer: Normalizer | None = None
         self.norm_kind: str | None = None
         self.task: str = "regression"
 
@@ -56,6 +57,7 @@ class MLPService:
         self.split_raw = None
         self.split = None
         self.normalizer = None
+        self.y_normalizer = None
         self.norm_kind = None
         self.encoder = None
         self.history = []
@@ -128,6 +130,7 @@ class MLPService:
         self.split_raw = None
         self.split = None
         self.normalizer = None
+        self.y_normalizer = None
         self.norm_kind = None
         self.history = []
         self.meta["input_cols"] = list(input_cols)
@@ -162,8 +165,12 @@ class MLPService:
             raise StateError("Carregue um dataset antes de realizar a divisão.")
 
         self.split_raw = split(self.raw_dataset, train_pct, val_pct, test_pct, seed=seed)
-        # Reaplica normalização caso já estivesse configurada
-        self.split, self.normalizer = apply_normalization(self.split_raw, self.norm_kind)
+        # Reaplica normalização caso já estivesse configurada (entradas e saídas)
+        self.split, self.normalizer, self.y_normalizer = apply_normalization(
+            self.split_raw,
+            self.norm_kind,
+            normalize_y=self.norm_kind is not None,
+        )
 
         return {
             "train": int(len(self.split.train)),
@@ -176,7 +183,11 @@ class MLPService:
             raise StateError("Divida o dataset antes de configurar a normalização.")
 
         # Aplica sempre a partir de split_raw para evitar normalizar dados já normalizados
-        self.split, self.normalizer = apply_normalization(self.split_raw, kind)
+        self.split, self.normalizer, self.y_normalizer = apply_normalization(
+            self.split_raw,
+            kind,
+            normalize_y=kind is not None,
+        )
         self.norm_kind = kind
         return {"normalization": kind}
 
@@ -205,6 +216,7 @@ class MLPService:
             lr=lr,
             epochs=epochs,
             shuffle_seed=shuffle_seed,
+            y_normalizer=self.y_normalizer,
         )
 
         def _handle_epoch(res: EpochResult) -> None:
@@ -247,7 +259,29 @@ class MLPService:
             raise DatasetError(f"O subconjunto '{subset}' está vazio.")
 
         preds = np.array([self.network.forward(x) for x in target_ds.X], dtype=float)
-        mse_val = evaluate_mse(self.network, target_ds.X, target_ds.Y)
+
+        # Desnormaliza para que todas as métricas e valores exibidos na interface fiquem na escala original
+        if self.y_normalizer is not None:
+            y_true_display = self.y_normalizer.inverse_transform(target_ds.Y)
+            preds_display = self.y_normalizer.inverse_transform(preds)
+        else:
+            y_true_display = target_ds.Y
+            preds_display = preds
+
+        mse_val = mse(y_true_display, preds_display)
+
+        if self.task == "regression":
+            var_y = float(np.mean(np.var(y_true_display, axis=0)))
+            r2_val = float(1.0 - (mse_val / var_y)) if var_y > 0.0 else 0.0
+
+            return {
+                "subset": subset,
+                "n_samples": int(len(target_ds)),
+                "mse": float(mse_val),
+                "r2": r2_val,
+                "y_true": y_true_display.tolist(),
+                "y_pred": preds_display.tolist(),
+            }
 
         result: dict = {
             "subset": subset,
@@ -255,15 +289,9 @@ class MLPService:
             "mse": float(mse_val),
         }
 
-        if self.task == "regression":
-            var_y = float(np.mean(np.var(target_ds.Y, axis=0)))
-            r2_val = float(1.0 - (mse_val / var_y)) if var_y > 0.0 else 0.0
-            result["r2"] = r2_val
-            result["y_true"] = target_ds.Y.tolist()
-            result["y_pred"] = preds.tolist()
-        elif self.task == "classification" and self.encoder is not None:
-            y_true_labels = [self.encoder.decode(y) for y in target_ds.Y]
-            y_pred_labels = [self.encoder.decode(p) for p in preds]
+        if self.task == "classification" and self.encoder is not None:
+            y_true_labels = [self.encoder.decode(y) for y in y_true_display]
+            y_pred_labels = [self.encoder.decode(p) for p in preds_display]
             cm = confusion_matrix(y_true_labels, y_pred_labels, self.encoder.classes_)
             result["accuracy"] = float(accuracy(y_true_labels, y_pred_labels))
             result["classes"] = list(self.encoder.classes_)
@@ -280,6 +308,7 @@ class MLPService:
             normalizer=self.normalizer,
             task=self.task,
             meta=self.meta,
+            y_normalizer=self.y_normalizer,
         )
         return predict(model, values)
 
@@ -294,12 +323,14 @@ class MLPService:
             normalizer=self.normalizer,
             task=self.task,
             meta=self.meta,
+            y_normalizer=self.y_normalizer,
         )
 
     def load(self, path: str | Path) -> dict:
         loaded = load_model(path)
         self.network = loaded.network
         self.normalizer = loaded.normalizer
+        self.y_normalizer = loaded.y_normalizer
         self.norm_kind = loaded.normalizer.kind if loaded.normalizer else None
         self.task = loaded.task
         self.meta = dict(loaded.meta)

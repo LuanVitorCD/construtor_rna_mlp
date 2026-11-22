@@ -49,6 +49,8 @@ class LabelEncoder:
 
 
 def accuracy(y_true_labels: list[str], y_pred_labels: list[str]) -> float:
+    if len(y_true_labels) != len(y_pred_labels):
+        raise ValueError("A quantidade de rótulos verdadeiros e previstos deve ser igual.")
     if not y_true_labels:
         return 0.0
     hits = sum(1 for yt, yp in zip(y_true_labels, y_pred_labels) if yt == yp)
@@ -61,6 +63,8 @@ def confusion_matrix(
     classes: list[str],
 ) -> np.ndarray:
     """Matriz de confusão onde linhas = classe real e colunas = classe prevista."""
+    if len(y_true_labels) != len(y_pred_labels):
+        raise ValueError("A quantidade de rótulos verdadeiros e previstos deve ser igual.")
     idx_map = {c: i for i, c in enumerate(classes)}
     cm = np.zeros((len(classes), len(classes)), dtype=int)
     for yt, yp in zip(y_true_labels, y_pred_labels):
