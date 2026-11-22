@@ -271,8 +271,13 @@ class MLPService:
         mse_val = mse(y_true_display, preds_display)
 
         if self.task == "regression":
-            var_y = float(np.mean(np.var(y_true_display, axis=0)))
-            r2_val = float(1.0 - (mse_val / var_y)) if var_y > 0.0 else 0.0
+            mse_per_col = np.mean((y_true_display - preds_display) ** 2, axis=0)
+            var_per_col = np.var(y_true_display, axis=0)
+            valid = var_per_col > 0.0
+            if np.any(valid):
+                r2_val = float(np.mean(1.0 - (mse_per_col[valid] / var_per_col[valid])))
+            else:
+                r2_val = 0.0
 
             return {
                 "subset": subset,
