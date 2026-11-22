@@ -71,11 +71,15 @@ def test_criar_modelo_de_regressao_ponta_a_ponta(csv_regressao, tmp_path):
         await ev._on_evaluate_all(None)
         assert set(state.evaluations) == {"train", "val", "test"}
         assert ev.message.level == "success"
-        # R² da tela = 1 − SQ_res/SQ_tot calculado aqui com as previsões da própria rede do backend
+        # R² e previsões da tela já chegam desnormalizados na unidade real
         service = gateway.service
-        test = service.split.test
-        y = [float(row[0]) for row in test.Y]
-        y_hat = [float(service.network.forward(x)[0]) for x in test.X]
+        test_norm = service.split.test
+        y = [float(row[0]) for row in service.split_raw.test.Y]
+        raw_preds = [service.network.forward(x) for x in test_norm.X]
+        if service.y_normalizer is not None:
+            y_hat = [float(row[0]) for row in service.y_normalizer.inverse_transform(raw_preds)]
+        else:
+            y_hat = [float(row[0]) for row in raw_preds]
         mean = sum(y) / len(y)
         ss_res = sum((a - b) ** 2 for a, b in zip(y, y_hat))
         ss_tot = sum((a - mean) ** 2 for a in y)
