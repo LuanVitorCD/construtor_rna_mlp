@@ -1,4 +1,4 @@
-"""Aba 4: avaliação nos subconjuntos (MSE do teste ao final, como pede o enunciado).
+"""Aba 4: avaliação sequencial nos subconjuntos (Treinamento -> Validação -> Teste).
 
 Métricas devolvidas pelo ``MLPService.evaluate``: MSE e nº de amostras; na regressão,
 R² e as saídas desejadas/estimadas (``y_true``/``y_pred``) para o gráfico "desejado ×
@@ -21,12 +21,27 @@ from frontend.components.ui import (
     section,
 )
 from frontend.context import AppContext, updates_page
-from frontend.parsing import format_fixed, format_number, format_percent
+from frontend.parsing import format_fixed, format_number, format_percent, format_r2
 from frontend.service_gateway import GatewayError
-from frontend.texts import HELP, SUBSET_LABELS
-from frontend.theme import SUCCESS
+from frontend.texts import SUBSET_LABELS
+from frontend.theme import SUCCESS, WARNING
 
 C = ft.Colors
+
+SUBSET_ORDER = ("train", "val", "test")
+SUBSET_ICONS = {
+    "train": ft.Icons.SCHOOL,
+    "val": ft.Icons.RULE,
+    "test": ft.Icons.SCIENCE,
+}
+
+MSE_R2_EXPLANATION = (
+    "MSE (Erro Quadrático Médio): média dos quadrados das diferenças entre o valor real (y) e o valor estimado pela rede (ŷ)."
+    "Por depender da escala dos dados, seu valor deve ser avaliado de forma relativa; quanto menor em comparação a outros modelos, melhor o ajuste.\n\n"
+    "R² (Coeficiente de Determinação): mede o quanto a rede explica a variação dos dados reais. "
+    "100% (1,000) indica ajuste perfeito; 0% (0,000) equivale a simplesmente prever a média; "
+    "valores negativos indicam desempenho pior que a média."
+)
 
 
 class EvaluationView:
@@ -36,23 +51,36 @@ class EvaluationView:
         self.ctx = ctx
         self.current: str | None = None
 
-        self.subset = ft.SegmentedButton(
-            segments=[ft.Segment(value=k, label=ft.Text(SUBSET_LABELS[k])) for k in ("test", "val", "train")],
-            selected=["test"],
-            allow_empty_selection=False,
-            on_change=self._on_subset_change,
+        # Indicador visual da sequência (não clicável): Treinamento -> Validação -> Teste
+        self.sequence_holder = ft.Row(spacing=8, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        self.eval_all_btn = ft.FilledButton(
+            "Avaliar os três subconjuntos",
+            icon=ft.Icons.FACT_CHECK,
+            on_click=self._on_evaluate_all,
+            style=ft.ButtonStyle(padding=ft.Padding.symmetric(horizontal=24, vertical=18)),
         )
-        self.eval_btn = ft.FilledButton("Avaliar", icon=ft.Icons.ASSESSMENT, on_click=self._on_evaluate,
-                                        style=ft.ButtonStyle(padding=ft.Padding.symmetric(horizontal=24, vertical=18)))
-        self.eval_all_btn = ft.OutlinedButton("Avaliar os três subconjuntos", icon=ft.Icons.FACT_CHECK,
-                                              on_click=self._on_evaluate_all)
-        self.subset_hint = Message()
         self.requirements = ft.Container()
         self.message = Message()
+        self.summary_holder = ft.Container()
 
-        self.metrics = ft.ResponsiveRow(spacing=12, run_spacing=12)
-        self.output_select = ft.Dropdown(label="Saída exibida", visible=False, on_select=self._on_output_change,
-                                         width=260, border_color=C.OUTLINE)
+        # Abas no topo da coluna direita para alternar o subconjunto exibido no gráfico e resultados
+        self.view_tabs = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value=k, label=ft.Text(SUBSET_LABELS[k]), icon=ft.Icon(SUBSET_ICONS[k]))
+                for k in SUBSET_ORDER
+            ],
+            selected=["test"],
+            allow_empty_selection=False,
+            on_change=self._on_tab_change,
+        )
+
+        self.output_select = ft.Dropdown(
+            label="Saída exibida",
+            visible=False,
+            on_select=self._on_output_change,
+            width=260,
+            border_color=C.OUTLINE,
+        )
         self.comparison = ComparisonChart()
         self.comparison_section = section(
             "Desejado × estimado pela rede",
@@ -61,46 +89,61 @@ class EvaluationView:
             subtitle="Cada ponto é uma amostra do subconjunto avaliado.",
         )
         self.comparison_section.visible = False
+
         self.confusion_holder = ft.Column(tight=True, spacing=8)
-        self.confusion_section = section("Matriz de confusão", [self.confusion_holder], icon=ft.Icons.CALL_SPLIT,
-                                         subtitle="Linhas: classe real. Colunas: classe prevista. "
-                                                  "Diagonal (em negrito, verde): acertos. Fora dela "
-                                                  "(vermelho): erros.")
+        self.confusion_section = section(
+            "Matriz de confusão",
+            [self.confusion_holder],
+            icon=ft.Icons.CALL_SPLIT,
+            subtitle="Linhas: classe real. Colunas: classe prevista. "
+                     "Diagonal (em negrito, verde): acertos. Fora dela (vermelho): erros.",
+        )
         self.confusion_section.visible = False
-        self.summary_holder = ft.Container()
+
+        self.metrics = ft.ResponsiveRow(spacing=12, run_spacing=12)
+        self.results_section = section(
+            "Resultados",
+            [self.metrics, learn_more("O que significam MSE e R²?", MSE_R2_EXPLANATION)],
+            icon=ft.Icons.INSIGHTS,
+        )
 
         left = ft.Column(
             [
                 section(
-                    "Escolha o subconjunto",
-                    [self.subset, self.subset_hint.root, ft.Row([self.eval_btn, self.eval_all_btn], wrap=True,
-                                                                spacing=12),
-                     self.requirements, self.message.root],
+                    "Avaliação dos subconjuntos",
+                    [self.sequence_holder, self.eval_all_btn, self.requirements, self.message.root],
                     icon=ft.Icons.ASSESSMENT,
+                    subtitle="Executa sequencialmente do treinamento ao teste.",
                 ),
-                section("Resultados", [self.metrics, learn_more("O que significam MSE e R²?",
-                                                                 HELP["mse"] + "\n\n" + HELP["r2"])],
-                        icon=ft.Icons.INSIGHTS),
-                section("Comparação entre subconjuntos", [self.summary_holder], icon=ft.Icons.TABLE_CHART,
-                        subtitle="Treinamento muito melhor que validação/teste indica sobreajuste."),
+                section(
+                    "Comparação entre subconjuntos",
+                    [self.summary_holder],
+                    icon=ft.Icons.TABLE_CHART,
+                    subtitle="Treinamento muito melhor que validação/teste indica sobreajuste.",
+                ),
             ],
             spacing=16,
             col={"xs": 12, "xl": 5},
         )
-        right = ft.Column([self.comparison_section, self.confusion_section], spacing=16, col={"xs": 12, "xl": 7})
+        right = ft.Column(
+            [
+                ft.Row([self.view_tabs], wrap=True),
+                self.comparison_section,
+                self.confusion_section,
+                self.results_section,
+            ],
+            spacing=16,
+            col={"xs": 12, "xl": 7},
+        )
         self.root = ft.ResponsiveRow([left, right], spacing=16, run_spacing=16)
-        self._on_subset_change(None)
         self.refresh()
 
     # ------------------------------------------------------------------ ações
-    def _selected_subset(self) -> str:
-        return (self.subset.selected or ["test"])[0]
-
-    def _on_subset_change(self, _e) -> None:
-        if self._selected_subset() == "test":
-            self.subset_hint.show("info", "Conjunto de teste", HELP["test"])
-        else:
-            self.subset_hint.clear()
+    def _on_tab_change(self, _e) -> None:
+        selected = (self.view_tabs.selected or ["test"])[0]
+        self.current = selected
+        self._render()
+        self.ctx.update()
 
     async def _evaluate(self, subset: str) -> dict | None:
         try:
@@ -113,66 +156,98 @@ class EvaluationView:
         return result
 
     @updates_page
-    async def _on_evaluate(self, _e) -> None:
-        subset = self._selected_subset()
-        self._set_busy(True)
-        try:
-            result = await self._evaluate(subset)
-        finally:
-            self._set_busy(False)
-        if result is None:
-            return
-        self.current = subset
-        text = f"MSE = {format_number(result.get('mse'))}"
-        if result.get("r2") is not None:
-            text += f" · R² = {format_fixed(result['r2'])}"
-        self.message.show("success", f"Avaliação: {SUBSET_LABELS[subset]}", text)
-        self._render()
-
-    @updates_page
     async def _on_evaluate_all(self, _e) -> None:
         self._set_busy(True)
         try:
-            for subset in ("train", "val", "test"):
+            for subset in SUBSET_ORDER:
                 if await self._evaluate(subset) is None:
                     return
+                self.current = subset
+                self.view_tabs.selected = [subset]
+                self._render()
+                self.ctx.update()
         finally:
             self._set_busy(False)
-        self.current = self._selected_subset()
-        self.message.show("success", "Três subconjuntos avaliados", "Veja a comparação abaixo.")
+        self.current = "test"
+        self.view_tabs.selected = ["test"]
+        self.message.show("success", "Três subconjuntos avaliados", "Exibindo os resultados do conjunto de teste.")
         self._render()
 
     def _set_busy(self, busy: bool) -> None:
-        self.eval_btn.disabled = busy
         self.eval_all_btn.disabled = busy
+        self.view_tabs.disabled = busy
         self.ctx.update()
 
     def _on_output_change(self, _e) -> None:
         self._render_comparison()
 
     # ----------------------------------------------------------------- render
+    def _render_sequence(self) -> None:
+        evals = self.ctx.state.evaluations
+        items: list[ft.Control] = []
+        for idx, key in enumerate(SUBSET_ORDER):
+            done = key in evals
+            color = SUCCESS if done else WARNING
+            icon = ft.Icons.CHECK_CIRCLE_ROUNDED if done else ft.Icons.WARNING_AMBER_ROUNDED
+            badge = ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(icon, size=16, color=color),
+                        ft.Text(
+                            SUBSET_LABELS[key],
+                            size=13,
+                            weight=ft.FontWeight.W_600,
+                            color=C.ON_SURFACE,
+                        ),
+                    ],
+                    spacing=6,
+                    tight=True,
+                ),
+                padding=ft.Padding.symmetric(horizontal=10, vertical=6),
+                border_radius=8,
+                bgcolor=ft.Colors.with_opacity(0.14, color),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.45, color)),
+            )
+            items.append(badge)
+            if idx < len(SUBSET_ORDER) - 1:
+                items.append(ft.Icon(ft.Icons.ARROW_FORWARD_ROUNDED, size=16, color=C.ON_SURFACE_VARIANT))
+        self.sequence_holder.controls = items
+
     def _render(self) -> None:
         state = self.ctx.state
-        result = state.evaluations.get(self.current or "")
+        self._render_sequence()
         self._render_summary()
+
+        has_any_eval = bool(state.evaluations)
+        self.view_tabs.visible = has_any_eval
+        if self.current and self.view_tabs.selected != [self.current]:
+            self.view_tabs.selected = [self.current]
+
+        result = state.evaluations.get(self.current or "")
         if not result:
-            self.metrics.controls = []
+            self.metrics.controls = [body("Avalie os subconjuntos para visualizar os resultados.")]
             self.comparison_section.visible = False
             self.confusion_section.visible = False
             return
+
+        subset_label = SUBSET_LABELS.get(self.current or "", "")
+        self.results_section.title = f"Resultados · {subset_label}" if subset_label else "Resultados"
+
         mse = result.get("mse")
-        tiles = [
-            metric("MSE", format_number(mse), hint=SUBSET_LABELS.get(self.current or "", "")),
-        ]
+        mse_tile = metric("MSE", format_number(mse))
+        mse_tile.tooltip = subset_label
+        tiles = [mse_tile]
         n = result.get("n_samples") or state.split_size(self.current or "")
         if n is not None:
             tiles.append(metric("Amostras", format_number(int(n))))
         if "accuracy" in result:
-            tiles.append(metric("Taxa de acertos", format_percent(100 * float(result["accuracy"])),
-                                hint="acurácia"))
+            acc_tile = metric("Taxa de acertos", format_percent(100 * float(result["accuracy"])))
+            acc_tile.tooltip = "acurácia"
+            tiles.append(acc_tile)
         if result.get("r2") is not None:
-            tiles.append(metric("R² (coef. de determinação)", format_fixed(result["r2"]),
-                                hint="1 = perfeito · 0 = igual a prever a média"))
+            r2_tile = metric("R²", format_r2(result["r2"], include_raw=False))
+            r2_tile.tooltip = "100% = perfeito · 0% = igual a prever a média"
+            tiles.append(r2_tile)
         self.metrics.controls = tiles
         self._render_comparison()
         self._render_confusion(result)
@@ -259,7 +334,7 @@ class EvaluationView:
         if has_acc:
             columns.append(ft.DataColumn(ft.Text("Acertos"), numeric=True))
         rows = []
-        for key in ("train", "val", "test"):
+        for key in SUBSET_ORDER:
             r = evals.get(key)
             if not r:
                 continue
@@ -280,7 +355,6 @@ class EvaluationView:
     def refresh(self) -> None:
         state = self.ctx.state
         ready = state.has_network and state.data_ready
-        self.eval_btn.disabled = state.training or not ready
         self.eval_all_btn.disabled = state.training or not ready
         if ready:
             self.requirements.content = None
@@ -294,4 +368,6 @@ class EvaluationView:
             ])
         if not state.evaluations:
             self.current = None
+        elif self.current not in state.evaluations:
+            self.current = "test" if "test" in state.evaluations else next(iter(state.evaluations))
         self._render()

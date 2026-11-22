@@ -31,7 +31,7 @@ from frontend.batch_prediction import (
 from frontend.components.charts import ComparisonChart
 from frontend.components.ui import Message, body, learn_more, metric, requirement_list, section
 from frontend.context import AppContext, updates_page
-from frontend.parsing import format_fixed, format_number, format_percent
+from frontend.parsing import format_number, format_percent, format_r2
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP
 from frontend.theme import SUCCESS
@@ -381,17 +381,22 @@ class CsvPredictionPanel:
         if self.comparing:
             cmp = self.comparison
             if self.labels is not None:
-                tiles.append(metric("Taxa de acertos", format_percent(100 * cmp["accuracy"]), hint="acurácia"))
+                acc_tile = metric("Taxa de acertos", format_percent(100 * cmp["accuracy"]))
+                acc_tile.tooltip = "acurácia"
+                tiles.append(acc_tile)
                 tiles.append(metric("Acertos", f"{cmp['correct']} de {cmp['n']}"))
                 if cmp["unknown"]:
                     self.compare_message.show(
                         "info", "Classes que a rede não conhece",
                         f"{cmp['unknown']} linha(s) têm uma classe que não apareceu no treinamento; contam como erro.")
             else:
-                tiles.append(metric("MSE", format_number(cmp["mse"]), hint="comparado à coluna oculta"))
+                mse_tile = metric("MSE", format_number(cmp["mse"]))
+                mse_tile.tooltip = "Comparado à coluna oculta"
+                tiles.append(mse_tile)
                 if cmp["r2"] is not None:
-                    tiles.append(metric("R² (coef. de determinação)", format_fixed(cmp["r2"]),
-                                        hint="1 = perfeito · 0 = igual a prever a média"))
+                    r2_tile = metric("R²", format_r2(cmp["r2"], include_raw=False))
+                    r2_tile.tooltip = "Coeficiente de determinação · 100% = perfeito · 0% = igual a prever a média"
+                    tiles.append(r2_tile)
         self.metrics.controls = tiles
 
     def _render_table(self) -> None:
