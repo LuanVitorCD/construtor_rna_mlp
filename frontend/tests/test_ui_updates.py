@@ -39,8 +39,7 @@ def test_handlers_terminam_com_update_da_pagina(csv_regressao, monkeypatch):
         state, page, (data, arch, train, ev, pred), _t, _gw = build_app()
         page.update = lambda *c: events.append("update")
         for handler in (lambda: data.open_csv(csv_regressao), lambda: arch._on_create(None),
-                        lambda: data._on_apply(None), lambda: ev._on_evaluate(None),
-                        lambda: ev._on_evaluate_all(None)):
+                        lambda: data._on_apply(None), lambda: ev._on_evaluate_all(None)):
             events.clear()
             await handler()
             assert "show" in events and events[-1] == "update", events

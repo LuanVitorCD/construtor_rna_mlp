@@ -69,7 +69,7 @@ def test_fluxo_completo_de_regressao_csv_primeiro(csv_regressao):
         tile_labels = [tile.content.label for tile in ev.metrics.controls]
         summary_cols = [c.label.value for c in ev.summary_holder.content.columns]
         # Só métricas vistas em aula: nada de RMSE, MAE ou erro relativo
-        assert [t.split(":")[0] for t in tile_labels] == ["MSE", "Amostras", "R² (coef. de determinação)"]
+        assert [t.split(":")[0] for t in tile_labels] == ["MSE", "Amostras", "R²"]
         assert summary_cols == ["Subconjunto", "MSE", "R²"]  # regressão: R² no lugar de "Acertos"
         for subset, result in state.evaluations.items():  # R² = 1 − MSE / Var(y) do subconjunto
             assert result["n_samples"] == state.split_size(subset) == len(result["y_true"])
@@ -139,7 +139,7 @@ def test_alterar_dados_depois_de_aplicar_exige_reaplicar(csv_regressao):
         data.val_pct.value = "25"
         data._on_pct_change(object())
         assert state.data_dirty and not state.data_ready
-        assert train.start_btn.disabled and ev.eval_btn.disabled
+        assert train.start_btn.disabled and ev.eval_all_btn.disabled
         assert data.apply_message.level == "warning" and not data.apply_btn.disabled
 
         await data._on_apply(None)
@@ -165,7 +165,7 @@ def test_fluxo_de_classificacao_conta_classes_antes_da_rede(csv_classes):
         train.epochs.value = "5"
         await train._on_start(None)
         await page.tasks[-1]
-        await ev._on_evaluate(None)
+        await ev._on_evaluate_all(None)
         assert ev.confusion_section.visible and not ev.comparison_section.visible
         assert state.evaluations["test"].get("r2") is None  # R² só na regressão
         assert [c.label.value for c in ev.summary_holder.content.columns] == ["Subconjunto", "MSE", "Acertos"]
@@ -228,7 +228,7 @@ def test_grafico_desejado_estimado_com_duas_saidas(tmp_path):
         await data.open_csv(str(path))
         data._on_role_change("y1", ["out"])
         await arch._on_create(None)
-        await ev._on_evaluate(None)
+        await ev._on_evaluate_all(None)
         assert ev.comparison_section.visible and ev.output_select.visible
         assert [o.text for o in ev.output_select.options] == ["y1", "y2"]
         ev.output_select.value = "1"

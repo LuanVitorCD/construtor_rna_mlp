@@ -126,7 +126,7 @@ def test_classificacao_com_backend_real(csv_classes):
         train.epochs.value, train.lr.value = "30", "0,1"
         await train._on_start(None)
         await asyncio.wait_for(page.tasks[-1], timeout=60)
-        await ev._on_evaluate(None)
+        await ev._on_evaluate_all(None)
         result = state.evaluations["test"]
         assert {"mse", "accuracy", "confusion_matrix", "classes"} <= set(result)
         assert ev.confusion_section.visible
