@@ -14,6 +14,7 @@ class LoadedModel:
     normalizer: Normalizer | None
     task: str
     meta: dict
+    y_normalizer: Normalizer | None = None
 
 
 def save_model(
@@ -22,6 +23,7 @@ def save_model(
     normalizer: Normalizer | None,
     task: str = "regression",
     meta: dict | None = None,
+    y_normalizer: Normalizer | None = None,
 ) -> None:
     """Serializa arquitetura, pesos, vieses e parâmetros de normalização em JSON."""
     payload = {
@@ -43,6 +45,7 @@ def save_model(
             for layer in network.layers
         ],
         "normalization": normalizer.to_dict() if normalizer is not None else None,
+        "y_normalization": y_normalizer.to_dict() if y_normalizer is not None else None,
         "meta": meta or {},
     }
 
@@ -55,7 +58,7 @@ def save_model(
 
 
 def load_model(path: str | Path) -> LoadedModel:
-    """Reconstrói a rede neural e o normalizador a partir de um arquivo JSON validado."""
+    """Reconstrói a rede neural e os normalizadores a partir de um arquivo JSON validado."""
     file_path = Path(path)
     if not file_path.exists():
         raise PersistenceError(f"Arquivo de modelo não encontrado: {file_path}")
@@ -80,7 +83,11 @@ def load_model(path: str | Path) -> LoadedModel:
         raise PersistenceError("O modelo deve conter ao menos uma camada válida.")
 
     try:
-        net = NeuralNetwork(int(data["n_inputs"]))
+        n_inputs = int(data["n_inputs"])
+        if n_inputs < 1:
+            raise PersistenceError("O número de entradas do modelo deve ser >= 1.")
+
+        net = NeuralNetwork(n_inputs)
         expected_inputs = net.n_inputs
 
         for layer_data in data["layers"]:
@@ -91,18 +98,23 @@ def load_model(path: str | Path) -> LoadedModel:
             if len(neurons_data) != n_neurons:
                 raise PersistenceError("Contagem de neurônios inconsistente com 'n_neurons'.")
 
+            weights_list = []
+            biases_list = []
             for n_data in neurons_data:
-                if len(n_data["weights"]) != expected_inputs:
+                w = [float(val) for val in n_data["weights"]]
+                b = float(n_data["bias"])
+                if len(w) != expected_inputs:
                     raise PersistenceError(
                         f"Dimensão de pesos inválida: esperava {expected_inputs}, "
-                        f"encontrou {len(n_data['weights'])}."
+                        f"encontrou {len(w)}."
                     )
+                if not all(val == val and abs(val) != float("inf") for val in w + [b]):
+                    raise PersistenceError("Pesos e vieses do modelo devem ser numéricos finitos.")
+                weights_list.append(w)
+                biases_list.append(b)
 
             net.add_layer(n_neurons, activation)
-            net.layers[-1].set_parameters(
-                weights=[n["weights"] for n in neurons_data],
-                biases=[n["bias"] for n in neurons_data],
-            )
+            net.layers[-1].set_parameters(weights=weights_list, biases=biases_list)
             expected_inputs = n_neurons
 
         normalizer = (
@@ -110,6 +122,27 @@ def load_model(path: str | Path) -> LoadedModel:
             if data["normalization"] is not None
             else None
         )
+        y_normalizer = (
+            Normalizer.from_dict(data["y_normalization"])
+            if data.get("y_normalization") is not None
+            else None
+        )
+
+        if normalizer is not None:
+            for param_arr in normalizer.params.values():
+                if param_arr.shape != (net.n_inputs,) or not all(
+                    float(v) == float(v) and abs(float(v)) != float("inf") for v in param_arr
+                ):
+                    raise PersistenceError("Parâmetros de normalização de entrada incompatíveis.")
+
+        if y_normalizer is not None:
+            for param_arr in y_normalizer.params.values():
+                if param_arr.shape != (net.n_outputs,) or not all(
+                    float(v) == float(v) and abs(float(v)) != float("inf") for v in param_arr
+                ):
+                    raise PersistenceError("Parâmetros de normalização de saída incompatíveis.")
+    except PersistenceError:
+        raise
     except (KeyError, TypeError, ValueError, ConfigError) as exc:
         raise PersistenceError(f"Erro ao reconstruir modelo a partir do JSON: {exc}") from exc
 
@@ -118,4 +151,5 @@ def load_model(path: str | Path) -> LoadedModel:
         normalizer=normalizer,
         task=data.get("task", "regression"),
         meta=data.get("meta") or {},
+        y_normalizer=y_normalizer,
     )
