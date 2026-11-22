@@ -36,6 +36,9 @@ SUCCESS = ft.Colors.TERTIARY_FIXED_DIM  # ícones, bordas e textos curtos
 SUCCESS_CONTAINER = ft.Colors.TERTIARY_FIXED  # fundo de mensagens de sucesso
 ON_SUCCESS_CONTAINER = ft.Colors.ON_TERTIARY_FIXED  # texto sobre esse fundo
 
+# Amarelo de aviso/atenção
+WARNING = ft.Colors.AMBER_600
+
 # Chaves = nomes dos campos de ft.ColorScheme.
 LIGHT: dict[str, str] = {
     "primary": BRAND_CC_BLUE,

@@ -144,6 +144,17 @@ def format_percent(value: float | None, digits: int = 1) -> str:
     return f"{value:.{digits}f}%".replace(".", ",")
 
 
+def format_r2(value: float | None, *, include_raw: bool = True) -> str:
+    """Formata o coeficiente de determinação R² como '98,2% (0,982)' ou apenas '98,2%'."""
+    if value is None or not math.isfinite(value):
+        return "—"
+    v = float(value)
+    if abs(v) < 5e-4:
+        v = 0.0
+    pct = format_percent(100.0 * v)
+    return f"{pct} ({format_fixed(v)})" if include_raw else pct
+
+
 def to_input_text(value: float | int | None) -> str:
     """Valor para preencher um campo editável (sem sinal tipográfico, para poder ser relido)."""
     if value is None:
