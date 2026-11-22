@@ -174,3 +174,23 @@ def test_classificacao_com_numero_errado_de_saidas(csv_classificacao):
     )
     with pytest.raises(DatasetError):
         svc.load_dataset(csv_classificacao, ["f1", "f2"], ["label"])
+
+
+def test_r2_multiplas_saidas_calcula_media_dos_r2_individuais(tmp_path):
+    csv_path = tmp_path / "multi.csv"
+    linhas = ["x,y1,y2"] + [f"{i},{1000.0 * i},{0.1 * i}" for i in range(1, 21)]
+    csv_path.write_text("\n".join(linhas), encoding="utf-8")
+
+    svc = MLPService()
+    svc.create_network(
+        n_inputs=1,
+        layers=[{"neurons": 4, "activation": "tanh"}, {"neurons": 2, "activation": "linear"}],
+        seed=1,
+    )
+    svc.load_dataset(csv_path, ["x"], ["y1", "y2"])
+    svc.split_dataset(70, 15, 15, seed=1)
+    svc.set_normalization("zscore")
+    treinar_e_esperar(svc, epochs=30, lr=0.05, shuffle_seed=1)
+
+    res = svc.evaluate("test")
+    assert "r2" in res and isinstance(res["r2"], float)
