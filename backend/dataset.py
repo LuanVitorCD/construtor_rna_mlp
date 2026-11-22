@@ -124,8 +124,8 @@ def split(
     val_idx = indices[n_train : n_train + n_val]
     test_idx = indices[n_train + n_val :]
 
-    if len(train_idx) == 0 or len(val_idx) == 0:
-        raise DatasetError("Os subconjuntos de treino e validação não podem ficar vazios.")
+    if len(train_idx) == 0 or len(val_idx) == 0 or len(test_idx) == 0:
+        raise DatasetError("Os subconjuntos de treino, validação e teste não podem ficar vazios.")
 
     def _subset(idx: np.ndarray) -> Dataset:
         return Dataset(
