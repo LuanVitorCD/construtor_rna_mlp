@@ -1,8 +1,10 @@
 import numpy as np
 import pytest
-from backend.dataset import Dataset
+from backend.dataset import Dataset, DataSplit
 from backend.errors import ConfigError, DatasetError
+from backend.losses import mse
 from backend.network import NeuralNetwork
+from backend.normalization import apply_normalization
 from backend.trainer import Trainer
 from backend.tests.helpers import params_iguais, snapshot_params
 
@@ -115,6 +117,29 @@ def test_validacao_vazia_e_recusada():
     net = NeuralNetwork.from_config(1, [{"neurons": 1, "activation": "linear"}])
     with pytest.raises(DatasetError):
         Trainer(net, train, val_vazio, lr=0.01, epochs=5)
+
+
+def test_trainer_calcula_mse_na_escala_original():
+    train_raw, val_raw = _dados_linha()
+    split_norm, _, y_norm = apply_normalization(
+        DataSplit(train=train_raw, val=val_raw, test=val_raw),
+        "zscore",
+        normalize_y=True,
+    )
+    net = NeuralNetwork.from_config(1, [{"neurons": 1, "activation": "linear"}], seed=1)
+    hist = Trainer(
+        net,
+        split_norm.train,
+        split_norm.val,
+        lr=0.01,
+        epochs=3,
+        shuffle_seed=1,
+        y_normalizer=y_norm,
+    ).run()
+
+    preds_norm = np.array([net.forward(x) for x in split_norm.val.X], dtype=float)
+    preds_real = y_norm.inverse_transform(preds_norm)
+    assert hist[-1].val_mse == pytest.approx(mse(val_raw.Y, preds_real))
 
 
 @pytest.mark.slow

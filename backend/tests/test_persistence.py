@@ -53,16 +53,20 @@ def test_pesos_e_vieses_identicos(tmp_path):
 
 def test_normalizacao_salva_e_restaurada(tmp_path):
     X = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-    ds = Dataset(X, np.zeros((2, 2)), ["a", "b", "c"], ["y1", "y2"])
-    _, norm = apply_normalization(DataSplit(ds, ds, ds), "zscore")
+    Y = np.array([[10.0, 20.0], [30.0, 40.0]])
+    ds = Dataset(X, Y, ["a", "b", "c"], ["y1", "y2"])
+    _, norm, y_norm = apply_normalization(DataSplit(ds, ds, ds), "zscore", normalize_y=True)
 
     path = tmp_path / "m.json"
-    save_model(path, _rede_exemplo(), normalizer=norm)
+    save_model(path, _rede_exemplo(), normalizer=norm, y_normalizer=y_norm)
     modelo = load_model(path)
 
     assert modelo.normalizer.kind == "zscore"
     assert np.allclose(modelo.normalizer.params["mean"], norm.params["mean"])
     assert np.allclose(modelo.normalizer.transform(X), norm.transform(X))
+    assert modelo.y_normalizer is not None
+    assert modelo.y_normalizer.kind == "zscore"
+    assert np.allclose(modelo.y_normalizer.inverse_transform(Y), y_norm.inverse_transform(Y))
 
 
 def test_sem_normalizacao_grava_null(tmp_path):
@@ -70,7 +74,10 @@ def test_sem_normalizacao_grava_null(tmp_path):
     save_model(path, _rede_exemplo(), normalizer=None)
     d = json.loads(path.read_text(encoding="utf-8"))
     assert d["normalization"] is None
-    assert load_model(path).normalizer is None
+    assert d["y_normalization"] is None
+    loaded = load_model(path)
+    assert loaded.normalizer is None
+    assert loaded.y_normalizer is None
 
 
 def test_json_tem_os_campos_exigidos(tmp_path):

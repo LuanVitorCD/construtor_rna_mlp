@@ -15,9 +15,9 @@ def _modelo_com_norm() -> LoadedModel:
         [{"neurons": 3, "activation": "tanh"}, {"neurons": 1, "activation": "linear"}],
         seed=4,
     )
-    ds = Dataset(np.array([[0.0, 0.0], [10.0, 20.0]]), np.array([[0.0], [1.0]]), ["a", "b"], ["y"])
-    _, norm = apply_normalization(DataSplit(ds, ds, ds), "minmax")
-    return LoadedModel(network=net, normalizer=norm, task="regression", meta={})
+    ds = Dataset(np.array([[0.0, 0.0], [10.0, 20.0]]), np.array([[100.0], [500.0]]), ["a", "b"], ["y"])
+    _, norm, y_norm = apply_normalization(DataSplit(ds, ds, ds), "minmax", normalize_y=True)
+    return LoadedModel(network=net, normalizer=norm, task="regression", meta={}, y_normalizer=y_norm)
 
 
 def test_previsao_regressao_formato():
@@ -41,7 +41,8 @@ def test_previsao_nao_altera_os_parametros():
 
 def test_previsao_aplica_a_normalizacao_do_treino():
     modelo = _modelo_com_norm()
-    esperado = modelo.network.forward(modelo.normalizer.transform(np.array([[10.0, 3.0]]))[0])
+    raw_out = modelo.network.forward(modelo.normalizer.transform(np.array([[10.0, 3.0]]))[0])
+    esperado = modelo.y_normalizer.inverse_transform(raw_out[None, :])[0]
     assert predict(modelo, [10.0, 3.0])["outputs"] == pytest.approx(esperado.tolist())
 
 
@@ -55,6 +56,13 @@ def test_sem_normalizador_usa_o_valor_cru():
 def test_previsao_apos_salvar_e_carregar_e_igual(tmp_path):
     modelo = _modelo_com_norm()
     path = tmp_path / "pred.json"
-    save_model(path, modelo.network, modelo.normalizer, modelo.task, modelo.meta)
+    save_model(
+        path,
+        modelo.network,
+        modelo.normalizer,
+        modelo.task,
+        modelo.meta,
+        y_normalizer=modelo.y_normalizer,
+    )
     recarregado = load_model(path)
     assert predict(modelo, [4.5, 9.0]) == predict(recarregado, [4.5, 9.0])

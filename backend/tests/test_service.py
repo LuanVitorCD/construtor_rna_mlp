@@ -155,12 +155,14 @@ def test_fluxo_completo_de_classificacao(csv_classificacao):
     )
     svc.load_dataset(csv_classificacao, ["f1", "f2"], ["label"])
     svc.split_dataset(70, 15, 15, seed=1)
+    svc.set_normalization("zscore")
     treinar_e_esperar(svc, epochs=20, lr=0.1)
 
     r = svc.evaluate("test")
     assert 0.0 <= r["accuracy"] <= 1.0
     assert "confusion_matrix" in r
     assert svc.predict([0.3, 0.7])["label"] in {"A", "B", "C"}
+    assert svc.evaluate("val")["mse"] == pytest.approx(svc.get_history()[-1]["val_mse"])
 
 
 def test_classificacao_com_numero_errado_de_saidas(csv_classificacao):
