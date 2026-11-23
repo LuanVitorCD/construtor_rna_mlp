@@ -15,7 +15,7 @@ APP_SUBTITLE = (
 
 TASK_LABELS = {
     "regression": "Regressão",
-    "classification": "Classificação (extra)",
+    "classification": "Classificação",
 }
 
 ACTIVATION_LABELS = {
@@ -73,9 +73,9 @@ HELP = {
         "com pesos aleatórios ao clicar em “Criar rede”."
     ),
     "hidden": (
-        "Uma camada oculta costuma bastar (Haykin). Para o nº de neurônios, a regra de "
-        "Kolmogorov sugere 2n + 1, com n = nº de entradas. Se duas redes generalizam igual, "
-        "prefira a menor (Ivan Nunes). Tanh é a escolha usual nas camadas ocultas."
+        "Uma camada oculta costuma bastar. Para o nº de neurônios, é sugerido "
+        "2n + 1, com n = nº de entradas. Se duas redes generalizam igual, "
+        "prefira a menor. Tanh é a escolha usual nas camadas ocultas."
     ),
     "output_regression": (
         "Na regressão, use Linear (identidade) na saída. Sigmoid limita a saída a (0, 1), "
@@ -90,8 +90,7 @@ HELP = {
     "csv": "Os dados devem vir limpos. Escolha quais colunas são entradas e quais são saídas esperadas.",
     "split": (
         "Treinamento ajusta os pesos. Validação mede a generalização a cada época, sem alterar "
-        "os pesos. Teste fica reservado para a avaliação final. Ivan Nunes cita 60–90% para "
-        "treinamento; Haykin separa 20% do treinamento para validação."
+        "os pesos. Teste fica reservado para a avaliação final."
     ),
     "normalization": (
         "Os parâmetros (mínimo/máximo ou média/desvio) vêm só do subconjunto de treinamento "
@@ -102,7 +101,7 @@ HELP = {
     "lr": (
         "Taxa de aprendizagem (η): tamanho do passo da descida do gradiente. Valores altos "
         "fazem o erro oscilar ou divergir; valores baixos deixam o treino lento. "
-        "Ivan Nunes sugere 0,05 ≤ η ≤ 0,75. Sem normalização, valores menores (0,001–0,01) são mais seguros."
+        "É sugerido 0,05 ≤ η ≤ 0,75. Sem normalização, valores menores (0,001–0,01) são mais seguros."
     ),
     "shuffle_seed": "Semente da ordem em que as amostras são apresentadas a cada época (opcional).",
     "retrain": (
@@ -112,7 +111,7 @@ HELP = {
     "curve": (
         "Se o MSE de validação sobe enquanto o de treinamento continua caindo, a rede está "
         "memorizando o ruído (sobreajuste). O ponto de menor MSE de validação é o ponto de "
-        "parada antecipada (Haykin, Fig. 4.20)."
+        "parada antecipada."
     ),
     "mse": (
         "MSE = (1/N) · Σ (y − ŷ)²: a média dos erros ao quadrado entre a saída esperada (y) e a "
@@ -126,10 +125,10 @@ HELP = {
     ),
     "test": (
         "Use o conjunto de teste só na avaliação final, depois de escolher arquitetura e "
-        "hiperparâmetros. O erro de validação tende a subestimar o erro real (Goodfellow, cap. 5)."
+        "hiperparâmetros. O erro de validação tende a subestimar o erro real."
     ),
     "extrapolation": (
-        "Uma MLP costuma errar fora da faixa de valores vista no treinamento (Ivan Nunes, cap. 5). "
+        "Uma MLP costuma errar fora da faixa de valores vista no treinamento. "
         "Prefira entradas dentro do domínio dos dados de treino."
     ),
     "predict": "A previsão só faz a propagação direta: os pesos e vieses não mudam.",
