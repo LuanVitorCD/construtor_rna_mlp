@@ -72,7 +72,7 @@ def _wrap(view, step) -> ft.Control:
             ft.Text(desc, color=C.ON_SURFACE_VARIANT, theme_style=ft.TextThemeStyle.BODY_LARGE),
             ft.Container(height=4),
             view.root,
-            ft.Container(height=24),
+            ft.Container(height=16),
         ],
         scroll=ft.ScrollMode.AUTO,
         expand=True,
@@ -83,11 +83,19 @@ def _wrap(view, step) -> ft.Control:
 class Workspace:
     """Menu lateral + conteúdo de um modo."""
 
-    def __init__(self, views: list, steps: list, done: Callable[[AppState], list[bool]], page: ft.Page) -> None:
+    def __init__(
+        self,
+        views: list,
+        steps: list,
+        done: Callable[[AppState], list[bool]],
+        page: ft.Page,
+        on_step_change: Callable[[], None] | None = None,
+    ) -> None:
         self.views = views
         self.steps = steps
         self.done = done
         self.page = page
+        self.on_step_change = on_step_change
         self.pages = [_wrap(view, step) for view, step in zip(views, steps)]
         self.rail = ft.NavigationRail(
             selected_index=0,
@@ -107,10 +115,18 @@ class Workspace:
         # itens de listas, como as duas "Rede atual" na aba Arquitetura.
         for i, page_control in enumerate(self.pages):
             page_control.visible = i == 0
-        self.content = ft.Container(content=ft.Column(self.pages, expand=True, spacing=0), expand=True,
-                                    padding=ft.Padding.only(left=28, right=20, top=16))
-        self.root = ft.Row([self.rail, ft.VerticalDivider(width=1, color=C.OUTLINE_VARIANT), self.content],
-                           expand=True, spacing=0, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+        self.content = ft.Container(
+            content=ft.Column(self.pages, expand=True, spacing=0),
+            expand=True,
+            padding=ft.Padding.only(left=28, right=20, top=16),
+        )
+
+        self.root = ft.Row(
+            [self.rail, ft.VerticalDivider(width=1, color=C.OUTLINE_VARIANT), self.content],
+            expand=True,
+            spacing=0,
+            vertical_alignment=ft.CrossAxisAlignment.STRETCH,
+        )
 
     @property
     def current(self) -> int:
@@ -121,6 +137,8 @@ class Workspace:
         self.rail.selected_index = index
         for i, page_control in enumerate(self.pages):
             page_control.visible = i == index
+        if self.on_step_change is not None:
+            self.on_step_change()
         self.page.update()
 
     def refresh(self, state: AppState) -> None:
@@ -194,16 +212,41 @@ class AppShell:
                 ),
             )
 
+        # --- barra inferior: linha de status à esquerda + botão Próximo à direita
         self.status_text = ft.Text("", size=13, color=C.ON_SURFACE_VARIANT, selectable=True)
+        self.next_btn = ft.OutlinedButton(
+            "Próximo",
+            icon=ft.Icons.ARROW_FORWARD,
+            on_click=self._on_next_step,
+            visible=False,
+            style=ft.ButtonStyle(
+                bgcolor=C.SURFACE_CONTAINER_HIGH,
+                padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+                side={
+                    ft.ControlState.DEFAULT: ft.BorderSide(1.5, C.PRIMARY),
+                    ft.ControlState.DISABLED: ft.BorderSide(1, C.OUTLINE_VARIANT),
+                },
+            ),
+        )
         status_bar = ft.Container(
-            content=ft.Row([ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=C.ON_SURFACE_VARIANT), self.status_text],
-                           spacing=8),
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=C.ON_SURFACE_VARIANT),
+                    ft.Container(content=self.status_text, expand=True),
+                    self.next_btn,
+                ],
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
             bgcolor=C.SURFACE_CONTAINER,
             border=ft.Border.only(top=ft.BorderSide(1, C.OUTLINE_VARIANT)),
             padding=ft.Padding.symmetric(horizontal=16, vertical=8),
         )
         self.body = ft.Container(expand=True)
         self.root = ft.Column([banner, self.body, status_bar], expand=True, spacing=0)
+        self._toast_seq = 0
+        self._toast_box = ft.Container(top=76, right=16, visible=False)
+        self.page.overlay.append(self._toast_box)
         self._apply_theme_colors()
         self.show_menu(update=False)
 
@@ -235,7 +278,9 @@ class AppShell:
         self.ctx.prepare_data = views[0].prepare
         self.workspace = Workspace(
             views, CREATE_STEPS, page=self.page,
-            done=lambda s: [s.data_ready, s.has_network, s.trained_epochs > 0, bool(s.evaluations), False])
+            done=lambda s: [s.data_ready, s.has_network, s.trained_epochs > 0, bool(s.evaluations), False],
+            on_step_change=self._sync_next_btn,
+        )
         self.body.content = self.workspace.root
         self._set_actions([self.template_btn, self.save_btn, self.reset_btn, self.menu_btn])
         self.refresh()
@@ -255,7 +300,11 @@ class AppShell:
         state = self._new_state("use")
         apply_loaded_model(state, info)
         views = [ModelInfoView(self.ctx), PredictionView(self.ctx)]
-        self.workspace = Workspace(views, USE_STEPS, page=self.page, done=lambda s: [s.has_network, False])
+        self.workspace = Workspace(
+            views, USE_STEPS, page=self.page,
+            done=lambda s: [s.has_network, False],
+            on_step_change=self._sync_next_btn,
+        )
         self.body.content = self.workspace.root
         self._set_actions([self.open_other_btn, self.menu_btn])
         self.refresh()
@@ -307,11 +356,52 @@ class AppShell:
         if self.workspace:
             self.workspace.navigate(index)
 
+    def _on_next_step(self, _e=None) -> None:
+        if self.workspace:
+            self.workspace.navigate(self.workspace.current + 1)
+
+    def _sync_next_btn(self) -> None:
+        if self.workspace is None:
+            self.next_btn.visible = False
+            return
+        state = self.ctx.state
+        idx = self.workspace.current
+        steps = self.workspace.steps
+        has_next = idx < len(steps) - 1
+        self.next_btn.visible = has_next
+        if not has_next:
+            return
+        next_label = steps[idx + 1][2]
+        label_text = f"Próximo: {next_label}"
+        self.next_btn.content = label_text
+        self.next_btn.text = label_text
+        if state.training:
+            self.next_btn.disabled = True
+        elif state.mode == "create":
+            # 0: Dados -> Arquitetura (exige CSV escolhido)
+            # 1: Arquitetura -> Treinamento (exige rede criada)
+            # 2: Treinamento -> Avaliação (exige treinamento finalizado)
+            # 3: Avaliação -> Previsão (exige os 3 subconjuntos avaliados)
+            if idx == 0:
+                self.next_btn.disabled = not bool(state.csv_path)
+            elif idx == 1:
+                self.next_btn.disabled = not state.has_network
+            elif idx == 2:
+                self.next_btn.disabled = state.trained_epochs <= 0
+            elif idx == 3:
+                self.next_btn.disabled = not all(k in state.evaluations for k in ("train", "val", "test"))
+            else:
+                self.next_btn.disabled = False
+        else:
+            # Modo "use": 0 (Informações) -> 1 (Previsão)
+            self.next_btn.disabled = not state.has_network
+
     # ----------------------------------------------------------------- estado
     def refresh(self) -> None:
         state = self.ctx.state
         if self.workspace:
             self.workspace.refresh(state)
+        self._sync_next_btn()
         busy = state.training
         self.menu_btn.disabled = busy
         self.reset_btn.disabled = busy
@@ -376,10 +466,8 @@ class AppShell:
     async def set_dark(self, dark: bool, *, persist: bool = True) -> None:
         self.dark = dark
         # Uma notificação aberta manteria o fundo do tema anterior (texto ilegível): fecha antes.
-        snack = getattr(self, "_snack", None)
-        if snack is not None and snack.open:
-            snack.open = False
-            snack.update()
+        if self._toast_box.visible:
+            self._toast_box.visible = False
         self._apply_theme_colors()
         self.page.update()
         if persist:
@@ -392,22 +480,61 @@ class AppShell:
         await self.set_dark(not self.dark)
 
     # --------------------------------------------------------------- diálogos
+    def _dismiss_toast(self) -> None:
+        if self._toast_box.visible:
+            self._toast_box.visible = False
+            self.page.update()
+
+    async def _auto_dismiss_toast(self, seq: int) -> None:
+        await asyncio.sleep(6)
+        if self._toast_seq == seq and self._toast_box.visible:
+            self._toast_box.visible = False
+            self.page.update()
+
     def toast(self, level: str, text: str) -> None:
         icon, bg, fg, spoken = LEVELS.get(level, LEVELS["info"])
-        self._snack = ft.SnackBar(
-            content=ft.Row([ft.Icon(icon, color=level_icon_color(level), semantics_label=spoken),
-                            ft.Text(text, color=fg, expand=True, selectable=True)], spacing=12),
+        max_toast_w = max(320, min(640, int((self.page.width or 1360) - 48)))
+        toast_card = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(icon, color=level_icon_color(level), semantics_label=spoken),
+                    ft.Container(
+                        content=ft.Text(text, color=fg, selectable=True),
+                        # Sem expand: mantém o toast compacto para textos curtos e quebra linha só se for longo
+                        width=None if len(text) < 75 else max_toast_w - 96,
+                    ),
+                    ft.IconButton(
+                        ft.Icons.CLOSE,
+                        icon_color=fg,
+                        icon_size=18,
+                        tooltip="Fechar aviso",
+                        on_click=lambda _e: self._dismiss_toast(),
+                        style=ft.ButtonStyle(padding=ft.Padding.all(4)),
+                    ),
+                ],
+                spacing=12,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
             bgcolor=bg,
-            behavior=ft.SnackBarBehavior.FLOATING,
-            show_close_icon=True,
-            close_icon_color=fg,
-            duration=ft.Duration(seconds=6),
+            border_radius=8,
+            padding=ft.Padding.only(left=16, right=8, top=8, bottom=8),
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=12,
+                color=ft.Colors.with_opacity(0.22, ft.Colors.BLACK),
+                offset=ft.Offset(0, 4),
+            ),
         )
-        self.page.show_dialog(self._snack)
-        # show_dialog() só atualiza a camada de diálogos, e isso faz o Flet pular a atualização
-        # automática do fim do evento: o que o handler mudou antes do aviso (ex.: os neurônios
-        # do "Sugerir neurônios") não chegava à tela. Atualiza a página inteira.
+        self._toast_seq += 1
+        seq = self._toast_seq
+        self._toast_box.content = toast_card
+        self._toast_box.visible = True
         self.page.update()
+        try:
+            asyncio.create_task(self._auto_dismiss_toast(seq))
+        except RuntimeError:
+            pass
 
     async def confirm(self, title: str, text: str, confirm_label: str) -> bool:
         future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()

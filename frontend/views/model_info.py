@@ -23,9 +23,6 @@ class ModelInfoView:
         self.file_name = ft.Text("", theme_style=ft.TextThemeStyle.TITLE_MEDIUM, weight=ft.FontWeight.W_600,
                                  color=C.ON_SURFACE, selectable=True)
         self.file_path = body("", selectable=True)
-        self.open_btn = ft.OutlinedButton("Abrir outro modelo", icon=ft.Icons.FOLDER_OPEN, on_click=self._on_open)
-        self.predict_btn = ft.FilledButton("Ir para Previsão", icon=ft.Icons.CALCULATE,
-                                           on_click=lambda _e: self.ctx.navigate(1), autofocus=True)
         self.metrics = ft.ResponsiveRow(spacing=12, run_spacing=12)
         self.columns_holder = ft.Column(tight=True, spacing=8)
         self.diagram = NetworkDiagram()
@@ -33,9 +30,7 @@ class ModelInfoView:
 
         left = ft.Column(
             [
-                section("Arquivo", [self.file_name, self.file_path,
-                                    ft.Row([self.predict_btn, self.open_btn], wrap=True, spacing=12)],
-                        icon=ft.Icons.DESCRIPTION),
+                section("Arquivo", [self.file_name, self.file_path], icon=ft.Icons.DESCRIPTION),
                 section("Resumo", [self.metrics], icon=ft.Icons.INSIGHTS),
                 section("Colunas e normalização", [self.columns_holder], icon=ft.Icons.TABLE_CHART),
             ],
@@ -56,8 +51,6 @@ class ModelInfoView:
 
     def refresh(self) -> None:
         state = self.ctx.state
-        busy = state.training
-        self.open_btn.disabled = busy
         if not state.network:
             self.file_name.value = "Nenhum modelo aberto"
             self.file_path.value = ""

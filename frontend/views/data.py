@@ -103,8 +103,6 @@ class DataView:
 
         # --- aplicar à rede
         self.apply_btn = ft.FilledButton("Aplicar dados à rede", icon=ft.Icons.DATASET, on_click=self._on_apply)
-        self.next_btn = ft.OutlinedButton("Próximo: Arquitetura", icon=ft.Icons.ARROW_FORWARD,
-                                          on_click=lambda _e: self.ctx.navigate(1))
         self.apply_message = Message()
 
         # --- resultado
@@ -143,7 +141,7 @@ class DataView:
                 ),
                 section(
                     "6. Aplicar à rede",
-                    [body(HELP["apply_data"]), ft.Row([self.next_btn, self.apply_btn], wrap=True, spacing=12),
+                    [body(HELP["apply_data"]), ft.Row([self.apply_btn], wrap=True, spacing=12),
                      self.apply_message.root],
                     icon=ft.Icons.DATASET,
                 ),
@@ -507,7 +505,6 @@ class DataView:
             control.disabled = busy
         self.apply_btn.disabled = busy or self._apply_problem() is not None
         self.apply_btn.visible = state.has_network
-        self.next_btn.visible = not state.has_network
         if state.has_network and state.task != state.task_choice:
             self.task_message.show("warning", "A tarefa mudou",
                                    f"A rede atual é de {TASK_LABELS[state.task]}. Recrie a rede na aba "

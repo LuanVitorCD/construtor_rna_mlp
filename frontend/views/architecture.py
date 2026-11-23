@@ -223,6 +223,7 @@ class ArchitectureView:
         self._sync_io()
         self._on_draft_change(None)
         self.create_btn.disabled = self._create_blocked()
+        self.summary_holder.controls = self._summary()
 
     def _sync_io(self) -> None:
         """Preenche (Automático) ou confere (Personalizado) entradas/saídas com o CSV."""
