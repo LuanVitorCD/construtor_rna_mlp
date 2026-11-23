@@ -36,11 +36,18 @@ SUBSET_ICONS = {
 }
 
 MSE_R2_EXPLANATION = (
-    "MSE (Erro Quadrático Médio): média dos quadrados das diferenças entre o valor real (y) e o valor estimado pela rede (ŷ)."
+    "MSE (Erro Quadrático Médio): média dos quadrados das diferenças entre o valor real (y) e o valor estimado pela rede (ŷ). "
     "Por depender da escala dos dados, seu valor deve ser avaliado de forma relativa; quanto menor em comparação a outros modelos, melhor o ajuste.\n\n"
     "R² (Coeficiente de Determinação): mede o quanto a rede explica a variação dos dados reais. "
-    "100% (1,000) indica ajuste perfeito; 0% (0,000) equivale a simplesmente prever a média; "
+    "1 indica ajuste perfeito (100%); 0 equivale a simplesmente prever a média (0%); "
     "valores negativos indicam desempenho pior que a média."
+)
+
+MSE_ACC_EXPLANATION = (
+    "MSE (Erro Quadrático Médio): média dos quadrados das diferenças entre a saída esperada (codificada em 0 e 1) "
+    "e a saída contínua estimada pela rede. Quanto mais próximo de 0, mais confiante e próxima da classe correta está a rede.\n\n"
+    "Taxa de Acertos (Acurácia): percentual de amostras em que a classe prevista pela rede (maior saída) "
+    "coincide com a classe real."
 )
 
 
@@ -101,9 +108,12 @@ class EvaluationView:
         self.confusion_section.visible = False
 
         self.metrics = ft.ResponsiveRow(spacing=12, run_spacing=12)
+        self.metrics_help_reg = learn_more("O que significam MSE e R²?", MSE_R2_EXPLANATION)
+        self.metrics_help_cls = learn_more("O que significam MSE e taxa de acertos?", MSE_ACC_EXPLANATION)
+        self.metrics_help_cls.visible = False
         self.results_section = section(
             "Resultados",
-            [self.metrics, learn_more("O que significam MSE e R²?", MSE_R2_EXPLANATION)],
+            [self.metrics, self.metrics_help_reg, self.metrics_help_cls],
             icon=ft.Icons.INSIGHTS,
         )
 
@@ -245,7 +255,7 @@ class EvaluationView:
             acc_tile.tooltip = "acurácia"
             tiles.append(acc_tile)
         if result.get("r2") is not None:
-            r2_tile = metric("R²", format_r2(result["r2"], include_raw=False))
+            r2_tile = metric("R²", format_fixed(result["r2"]), hint=format_r2(result["r2"], include_raw=False))
             r2_tile.tooltip = "100% = perfeito · 0% = igual a prever a média"
             tiles.append(r2_tile)
         self.metrics.controls = tiles
@@ -370,4 +380,7 @@ class EvaluationView:
             self.current = None
         elif self.current not in state.evaluations:
             self.current = "test" if "test" in state.evaluations else next(iter(state.evaluations))
+        is_cls = state.task == "classification"
+        self.metrics_help_reg.visible = not is_cls
+        self.metrics_help_cls.visible = is_cls
         self._render()

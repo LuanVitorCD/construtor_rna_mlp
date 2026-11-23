@@ -31,7 +31,7 @@ from frontend.batch_prediction import (
 from frontend.components.charts import ComparisonChart
 from frontend.components.ui import Message, body, learn_more, metric, requirement_list, section
 from frontend.context import AppContext, updates_page
-from frontend.parsing import format_number, format_percent, format_r2
+from frontend.parsing import format_fixed, format_number, format_percent, format_r2
 from frontend.service_gateway import GatewayError
 from frontend.texts import HELP
 from frontend.theme import SUCCESS
@@ -39,6 +39,20 @@ from frontend.theme import SUCCESS
 C = ft.Colors
 TABLE_ROWS = 100  # linhas mostradas na tabela (o CSV salvo tem todas)
 
+MSE_R2_EXPLANATION = (
+    "MSE (Erro Quadrático Médio): média dos quadrados das diferenças entre o valor real (y) e o valor estimado pela rede (ŷ)."
+    "Por depender da escala dos dados, seu valor deve ser avaliado de forma relativa; quanto menor em comparação a outros modelos, melhor o ajuste.\n\n"
+    "R² (Coeficiente de Determinação): mede o quanto a rede explica a variação dos dados reais. "
+    "1 indica ajuste perfeito (100%); 0 equivale a simplesmente prever a média (0%); "
+    "valores negativos indicam desempenho pior que a média."
+)
+
+MSE_ACC_EXPLANATION = (
+    "MSE (Erro Quadrático Médio): média dos quadrados das diferenças entre a saída esperada (codificada em 0 e 1) "
+    "e a saída contínua estimada pela rede. Quanto mais próximo de 0, mais confiante e próxima da classe correta está a rede.\n\n"
+    "Taxa de Acertos (Acurácia): percentual de amostras em que a classe prevista pela rede (maior saída) "
+    "coincide com a classe real."
+)
 
 class CsvPredictionPanel:
     def __init__(self, ctx: AppContext) -> None:
@@ -94,10 +108,21 @@ class CsvPredictionPanel:
         self.compare_hint = body("")
         self.compare_message = Message()
         self.metrics = ft.ResponsiveRow(spacing=12, run_spacing=12)
+        self.metrics_help_reg = learn_more("O que significam MSE e R²?", MSE_R2_EXPLANATION)
+        self.metrics_help_cls = learn_more("O que significam MSE e taxa de acertos?", MSE_ACC_EXPLANATION)
+        self.metrics_help_reg.visible = False
+        self.metrics_help_cls.visible = False
         self.table_holder = ft.Column(tight=True, spacing=8)
         self.results_section = section(
             "Resultados",
-            [self.compare_switch, self.compare_hint, self.compare_message.root, self.metrics],
+            [
+                self.compare_switch,
+                self.compare_hint,
+                self.compare_message.root,
+                self.metrics,
+                self.metrics_help_reg,
+                self.metrics_help_cls,
+            ],
             icon=ft.Icons.INSIGHTS,
             trailing=self.export_btn,
         )
@@ -373,14 +398,19 @@ class CsvPredictionPanel:
             hint = body("Escolha um arquivo, confira as colunas e clique em “Prever todas as linhas”.")
             hint.col = {"xs": 12}
             self.metrics.controls = [hint]
+            self.metrics_help_reg.visible = False
+            self.metrics_help_cls.visible = False
             return
         if self.compare_message.level == "info":
             self.compare_message.clear()
         n = len(self.outputs)
         tiles = [metric("Linhas previstas", format_number(n))]
+        is_cls = self.labels is not None
+        self.metrics_help_reg.visible = self.comparing and not is_cls
+        self.metrics_help_cls.visible = self.comparing and is_cls
         if self.comparing:
             cmp = self.comparison
-            if self.labels is not None:
+            if is_cls:
                 acc_tile = metric("Taxa de acertos", format_percent(100 * cmp["accuracy"]))
                 acc_tile.tooltip = "acurácia"
                 tiles.append(acc_tile)
@@ -394,7 +424,7 @@ class CsvPredictionPanel:
                 mse_tile.tooltip = "Comparado à coluna oculta"
                 tiles.append(mse_tile)
                 if cmp["r2"] is not None:
-                    r2_tile = metric("R²", format_r2(cmp["r2"], include_raw=False))
+                    r2_tile = metric("R²", format_fixed(cmp["r2"]), hint=format_r2(cmp["r2"], include_raw=False))
                     r2_tile.tooltip = "Coeficiente de determinação · 100% = perfeito · 0% = igual a prever a média"
                     tiles.append(r2_tile)
         self.metrics.controls = tiles
@@ -525,6 +555,8 @@ class CsvPredictionPanel:
             self.predict_message.show("info", "A rede mudou depois da previsão",
                                       "Clique em “Prever todas as linhas” de novo para usar a rede atual.")
             self._render_results()
+        elif self.outputs is not None:
+            self._render_metrics()
         ready = self._can_predict() and not self.busy.visible
         self.predict_btn.disabled = not ready
         self.pick_btn.disabled = self.busy.visible
