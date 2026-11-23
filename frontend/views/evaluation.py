@@ -181,6 +181,7 @@ class EvaluationView:
         self.current = "test"
         self.view_tabs.selected = ["test"]
         self.message.show("success", "Três subconjuntos avaliados", "Exibindo os resultados do conjunto de teste.")
+        self.ctx.state.notify()
         self._render()
 
     def _set_busy(self, busy: bool) -> None:
