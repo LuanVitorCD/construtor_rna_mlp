@@ -320,6 +320,17 @@ def test_sobreajuste_aparece_em_vermelho_logo_abaixo_do_botao():
     assert train.message.level == "success" and train.message.title == "Treinamento concluído"
 
 
+def test_sugerir_neuronios_confirma_com_aviso_verde(csv_regressao):
+    async def flow():
+        _state, _page, (data, arch, _train, _ev, _pred), toasts, _gw = build_app()
+        await data.open_csv(csv_regressao)  # 3 entradas
+        arch._on_suggest(None)
+        assert [r.neurons.value for r in arch.hidden_rows] == ["7"] * len(arch.hidden_rows)
+        assert toasts[-1] == ("success", "Sugestão aplicada: 7 neurônios por camada oculta (2 × 3 + 1).")
+
+    asyncio.run(flow())
+
+
 def test_usar_modelo_como_base_preenche_o_formulario(csv_classes, tmp_path):
     async def flow():
         # 1) cria e salva um modelo de classificação 2-5-3 com Min-Max

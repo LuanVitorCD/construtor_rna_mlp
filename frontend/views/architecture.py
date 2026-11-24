@@ -213,7 +213,7 @@ class ArchitectureView:
         for r in self.hidden_rows:
             r.neurons.value = str(suggestion)
         self._on_draft_change(None)
-        self.ctx.toast("info", f"Sugestão aplicada: {suggestion} neurônios por camada oculta (2 × {n_in} + 1).")
+        self.ctx.toast("success", f"Sugestão aplicada: {suggestion} neurônios por camada oculta (2 × {n_in} + 1).")
 
     # ----------------------------------------------------------- entradas/saídas
     def _io_mode(self) -> str:
