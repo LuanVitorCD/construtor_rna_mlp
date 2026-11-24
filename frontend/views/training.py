@@ -213,7 +213,8 @@ class TrainingView:
             state.trained_epochs += len(state.history)
             state.evaluations = {}
         self._render_progress()
-        self.insights.controls = [insight_box(i) for i in analyze_history(state.history, stopped_early=stopped)]
+        insights = analyze_history(state.history, stopped_early=stopped)
+        self.insights.controls = [insight_box(i) for i in insights]
         self._render_recent()
         done = len(state.history)
         if forced:
@@ -221,12 +222,18 @@ class TrainingView:
                               "A interface foi liberada, mas o treinamento pode continuar em segundo plano.")
         elif done:
             last = state.history[-1]
-            self.message.show(
-                "success",
-                "Treinamento interrompido" if stopped else "Treinamento concluído",
-                f"{done} época(s). MSE final: treinamento {format_number(last['train_mse'])}, "
-                f"validação {format_number(last['val_mse'])}. Próximo passo: aba Avaliação.",
-            )
+            outcome = "Treinamento interrompido" if stopped else "Treinamento concluído"
+            # A "Leitura da curva" fica abaixo da dobra: um problema (sobreajuste, divergência...)
+            # vai para a mensagem logo abaixo do botão, em vermelho, no lugar do aviso verde.
+            problem = next((i for i in insights if i.level == "error"), None)
+            if problem:
+                self.message.show("error", problem.title, f"{outcome} após {done} época(s). {problem.message}")
+            else:
+                self.message.show(
+                    "success", outcome,
+                    f"{done} época(s). MSE final: treinamento {format_number(last['train_mse'])}, "
+                    f"validação {format_number(last['val_mse'])}. Próximo passo: aba Avaliação.",
+                )
         else:
             self.message.show("warning", "Nenhuma época concluída", "O treinamento terminou sem resultados.")
         state.notify()

@@ -132,14 +132,17 @@ def analyze_history(history: Sequence[dict], *, stopped_early: bool = False) -> 
         rising = last["val_mse"] > best["val_mse"] * 1.05
         train_falling = last["train_mse"] <= history[max(0, len(history) - patience - 1)]["train_mse"]
         if epochs_since_best >= patience and rising and train_falling:
+            # Nível "error" (vermelho): o modelo final é pior que o da melhor época.
             insights.append(
                 Insight(
-                    "warning",
+                    "error",
                     "Possível sobreajuste (overfitting)",
-                    f"O MSE de validação está subindo desde a época {best['epoch']} "
-                    f"({format_number(best['val_mse'])}), enquanto o de treinamento continua caindo. "
-                    "A rede pode estar memorizando o ruído dos dados. A época "
-                    f"{best['epoch']} seria o ponto de parada antecipada.",
+                    # O essencial primeiro: este texto também vai para a mensagem logo abaixo do botão.
+                    f"Melhor época: {best['epoch']} (MSE de validação {format_number(best['val_mse'])}). "
+                    f"Depois dela, a validação subiu para {format_number(last['val_mse'])} enquanto o "
+                    "treinamento continuou caindo: a rede pode estar memorizando o ruído dos dados. "
+                    "Para a parada antecipada, recrie a rede na aba Arquitetura e treine com "
+                    f"{best['epoch']} épocas.",
                 )
             )
         elif best is last:

@@ -6,6 +6,7 @@ Modo "Criar novo modelo": Dados → Arquitetura → Treinamento → Avaliação 
 
 import asyncio
 
+import flet as ft
 import pytest
 
 from frontend.tests.ui_harness import build_app, build_use_app, table_rows
@@ -292,6 +293,31 @@ def test_parar_treinamento(csv_regressao):
         assert train.message.title == "Treinamento interrompido"
 
     asyncio.run(flow())
+
+
+def _history(train_mse, val_mse):
+    return [{"epoch": i + 1, "train_mse": t, "val_mse": v} for i, (t, v) in enumerate(zip(train_mse, val_mse))]
+
+
+def test_sobreajuste_aparece_em_vermelho_logo_abaixo_do_botao():
+    # A "Leitura da curva" fica abaixo da dobra; o aviso precisa aparecer na mensagem final.
+    state, _page, (_data, _arch, train, _ev, _pred), _toasts, _gw = build_app()
+    n = 60
+    train_mse = [1 / (i + 1) for i in range(n)]
+    state.history = _history(train_mse, [t + (0.002 * (i - 30) if i > 30 else 0) for i, t in enumerate(train_mse)])
+    train._finish(forced=False)
+    assert train.message.visible and train.message.level == "error"
+    assert train.message.title == "Possível sobreajuste (overfitting)"
+    text = train.message._holder.content.content.controls[1].controls[1].value
+    assert text.startswith("Treinamento concluído após 60 época(s). Melhor época: 31 ")
+    assert "treine com 31 épocas" in text
+    boxes = [c for c in train.insights.controls if c.bgcolor == ft.Colors.ERROR_CONTAINER]
+    assert len(boxes) == 1  # o cartão da leitura da curva também fica vermelho
+
+    # Sem problema na curva, continua a mensagem verde de sempre.
+    state.history = _history(train_mse, [t * 1.1 for t in train_mse])
+    train._finish(forced=False)
+    assert train.message.level == "success" and train.message.title == "Treinamento concluído"
 
 
 def test_usar_modelo_como_base_preenche_o_formulario(csv_classes, tmp_path):

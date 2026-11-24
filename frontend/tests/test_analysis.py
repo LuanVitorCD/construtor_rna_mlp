@@ -54,7 +54,7 @@ def test_detecta_sobreajuste():
     titles = [i.title for i in insights]
     assert any("sobreajuste" in t for t in titles)
     warning = next(i for i in insights if "sobreajuste" in i.title)
-    assert warning.level == "warning"
+    assert warning.level == "error"  # vermelho
     assert "parada antecipada" in warning.message
 
 
