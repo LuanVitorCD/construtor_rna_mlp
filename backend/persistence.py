@@ -1,15 +1,23 @@
+"""
+Módulo de persistência e validação estrutural de modelos treinados em formato JSON.
+
+Serializa e restaura a topologia da rede, pesos sinápticos, vieses, parâmetros de
+normalização e metadados da tarefa sem dependência de bibliotecas externas.
+"""
+
 from dataclasses import dataclass
 import json
 from pathlib import Path
 from backend.errors import ConfigError, PersistenceError
-from backend.network import NeuralNetwork
-from backend.normalization import Normalizer
+from backend.neural_network.network import NeuralNetwork
+from backend.data.normalization import Normalizer
 
 FORMAT_VERSION = 1
 
 
 @dataclass
 class LoadedModel:
+    """Agrupa a rede neural reconstituída e seus artefatos auxiliares de pré-processamento."""
     network: NeuralNetwork
     normalizer: Normalizer | None
     task: str
@@ -25,7 +33,7 @@ def save_model(
     meta: dict | None = None,
     y_normalizer: Normalizer | None = None,
 ) -> None:
-    """Serializa arquitetura, pesos, vieses e parâmetros de normalização em JSON."""
+    """Serializa arquitetura, pesos, vieses, normalizadores e metadados em arquivo JSON."""
     payload = {
         "format_version": FORMAT_VERSION,
         "task": task,
@@ -58,7 +66,7 @@ def save_model(
 
 
 def load_model(path: str | Path) -> LoadedModel:
-    """Reconstrói a rede neural e os normalizadores a partir de um arquivo JSON validado."""
+    """Lê, valida a integridade dimensional/numérica e reconstrói o modelo a partir de um JSON."""
     file_path = Path(path)
     if not file_path.exists():
         raise PersistenceError(f"Arquivo de modelo não encontrado: {file_path}")
@@ -90,6 +98,7 @@ def load_model(path: str | Path) -> LoadedModel:
         net = NeuralNetwork(n_inputs)
         expected_inputs = net.n_inputs
 
+        # Valida e reconstrói camada por camada verificando compatibilidade de dimensões e finitude
         for layer_data in data["layers"]:
             n_neurons = int(layer_data["n_neurons"])
             activation = layer_data["activation"]
@@ -128,6 +137,7 @@ def load_model(path: str | Path) -> LoadedModel:
             else None
         )
 
+        # Garante que os vetores estatísticos dos normalizadores coincidem com entradas e saídas da rede
         if normalizer is not None:
             for param_arr in normalizer.params.values():
                 if param_arr.shape != (net.n_inputs,) or not all(

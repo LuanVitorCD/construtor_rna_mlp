@@ -1,13 +1,20 @@
+"""
+Implementação de uma camada totalmente conectada (densa) da rede MLP.
+
+Agrupa um conjunto de neurônios que compartilham o mesmo vetor de entrada e
+a mesma função de ativação, gerenciando sua propagação direta.
+"""
+
 import numpy as np
 from numpy.random import Generator
-from backend.activations import get_activation
+from backend.neural_network.activations import get_activation
 from backend.errors import ConfigError
-from backend.initializers import init_layer_params
-from backend.neuron import Neuron
+from backend.neural_network.initializers import init_layer_params
+from backend.neural_network.neuron import Neuron
 
 
 class Layer:
-    """Agrupa neurônios que compartilham o mesmo vetor de entrada e função de ativação."""
+    """Camada densa composta por múltiplos neurônios conectados a todas as entradas anteriores."""
 
     def __init__(
         self,
@@ -35,16 +42,17 @@ class Layer:
         self.last_inputs: np.ndarray | None = None
 
     def forward(self, inputs: np.ndarray) -> np.ndarray:
-        # Armazena as entradas desta camada para multiplicar pelo delta na atualização de pesos
+        """Executa o passo forward em todos os neurônios da camada e retém o vetor de entrada."""
+        # Retém o vetor de entrada x^(l-1) para o cálculo do gradiente dE/dw_ji = delta_j * x_i no backward
         self.last_inputs = np.asarray(inputs, dtype=float)
         return np.array([n.forward(self.last_inputs) for n in self.neurons], dtype=float)
 
     def weight_matrix(self) -> np.ndarray:
-        """Retorna matriz W de formato (n_neurons, n_inputs) com os pesos atuais."""
+        """Retorna a matriz sináptica W de dimensão (n_neurons, n_inputs) com os pesos atuais."""
         return np.array([n.weights for n in self.neurons], dtype=float)
 
     def set_parameters(self, weights: list | np.ndarray, biases: list | np.ndarray) -> None:
-        """Sobrescreve pesos e vieses (usado ao restaurar modelos ou reproduzir exemplos)."""
+        """Sobrescreve pesos e vieses dos neurônios (utilizado na desserialização de modelos salvos)."""
         for neuron, w, b in zip(self.neurons, weights, biases):
             neuron.weights = np.array(w, dtype=float)
             neuron.bias = float(b)

@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 from backend.classification import LabelEncoder, accuracy, confusion_matrix
-from backend.dataset import Dataset
+from backend.data.dataset import Dataset
 from backend.errors import DatasetError
-from backend.network import NeuralNetwork
+from backend.neural_network.network import NeuralNetwork
 from backend.persistence import load_model, save_model
 from backend.predictor import predict
 from backend.trainer import Trainer

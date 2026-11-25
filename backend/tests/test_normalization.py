@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-from backend.dataset import Dataset, DataSplit
+from backend.data.dataset import Dataset, DataSplit
 from backend.errors import ConfigError
-from backend.normalization import Normalizer, apply_normalization
+from backend.data.normalization import Normalizer, apply_normalization
 
 
 def _make_split() -> DataSplit:

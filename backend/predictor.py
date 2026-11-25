@@ -1,3 +1,10 @@
+"""
+Pipeline de inferência (predição) para novos padrões individuais.
+
+Executa exclusivamente a propagação direta (forward pass), aplicando automaticamente
+a transformação de escala nas entradas e a reversão de escala nas saídas.
+"""
+
 import numpy as np
 from backend.classification import LabelEncoder
 from backend.errors import DatasetError
@@ -5,7 +12,7 @@ from backend.persistence import LoadedModel
 
 
 def predict(model: LoadedModel, values: list[float] | np.ndarray) -> dict:
-    """Executa inferência (apenas forward), normalizando entradas e desnormalizando saídas."""
+    """Executa inferência para um vetor de entrada, aplicando normalização e decodificação de classe."""
     try:
         x = np.asarray(values, dtype=float)
     except (TypeError, ValueError) as exc:
@@ -20,12 +27,13 @@ def predict(model: LoadedModel, values: list[float] | np.ndarray) -> dict:
     if not np.isfinite(x).all():
         raise DatasetError("Os valores de entrada devem ser números finitos (sem NaN ou Inf).")
 
+    # Aplica os parâmetros de normalização aprendidos no treino antes do forward pass
     if model.normalizer is not None:
-        # Normalizer espera matriz 2D (1, n_inputs)
         x = model.normalizer.transform(x[None, :])[0]
 
     outputs = model.network.forward(x)
 
+    # Reverte a normalização da saída para retornar o valor previsto na escala original
     if model.y_normalizer is not None:
         outputs = model.y_normalizer.inverse_transform(outputs[None, :])[0]
 

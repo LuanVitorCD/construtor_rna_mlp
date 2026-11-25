@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
-from backend.dataset import Dataset, DataSplit
+from backend.data.dataset import Dataset, DataSplit
 from backend.errors import ConfigError, DatasetError
-from backend.losses import mse
-from backend.network import NeuralNetwork
-from backend.normalization import apply_normalization
+from backend.neural_network.losses import mse
+from backend.neural_network.network import NeuralNetwork
+from backend.data.normalization import apply_normalization
 from backend.trainer import Trainer
 from backend.tests.helpers import params_iguais, snapshot_params
 

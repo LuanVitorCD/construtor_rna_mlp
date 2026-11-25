@@ -1,13 +1,21 @@
+"""
+Módulo de leitura, validação dimensional e particionamento de conjuntos de dados CSV.
+
+Gerencia a extração de tensores de entrada (X) e saída desejada (Y), além da
+divisão estratificada/aleatória em subconjuntos disjuntos de treino, validação e teste.
+"""
+
 import csv
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
 from backend.errors import DatasetError
-from backend.network import NeuralNetwork
+from backend.neural_network.network import NeuralNetwork
 
 
 @dataclass
 class Dataset:
+    """Encapsula matrizes de atributos (X) e alvos (Y) com os metadados de suas colunas."""
     X: np.ndarray
     Y: np.ndarray
     input_cols: list[str]
@@ -19,13 +27,14 @@ class Dataset:
 
 @dataclass
 class DataSplit:
+    """Agrupa as três partições disjuntas exigidas para treinamento e avaliação da MLP."""
     train: Dataset
     val: Dataset
     test: Dataset
 
 
 def read_columns(path: str | Path) -> list[str]:
-    """Lê apenas o cabeçalho do arquivo CSV para exibição na interface."""
+    """Lê apenas o cabeçalho do arquivo CSV para mapeamento das colunas na interface."""
     file_path = Path(path)
     if not file_path.exists():
         raise DatasetError(f"Arquivo CSV não encontrado: {file_path}")
@@ -43,7 +52,7 @@ def load_csv(
     output_cols: list[str],
     raw_outputs: bool = False,
 ) -> Dataset:
-    """Carrega entradas (X) e saídas (Y) do CSV. Se raw_outputs=True, mantém Y como strings."""
+    """Carrega matrizes de entrada (X) e saída desejada (Y) a partir de um arquivo CSV."""
     if not input_cols or not output_cols:
         raise DatasetError("Selecione ao menos uma coluna de entrada e uma de saída.")
 
@@ -75,6 +84,7 @@ def load_csv(
     except ValueError as exc:
         raise DatasetError("As colunas de entrada devem conter apenas valores numéricos.") from exc
 
+    # Para classificação, preserva rótulos textuais (strings) para codificação posterior
     if raw_outputs:
         Y = np.array([[row[c].strip() for c in output_cols] for row in rows], dtype=object)
     else:
@@ -87,7 +97,7 @@ def load_csv(
 
 
 def check_compatibility(dataset: Dataset, network: NeuralNetwork) -> None:
-    """Garante que a dimensão do dataset corresponde às entradas e saídas da rede."""
+    """Valida se as dimensões de entrada e saída do dataset coincidem com a topologia da rede."""
     if dataset.X.shape[1] != network.n_inputs:
         raise DatasetError(
             f"Incompatibilidade de entradas: dataset tem {dataset.X.shape[1]} colunas, "
@@ -107,7 +117,7 @@ def split(
     test_pct: float,
     seed: int | None = None,
 ) -> DataSplit:
-    """Divide aleatoriamente o dataset em treino, validação e teste sem sobreposição."""
+    """Particiona aleatoriamente o dataset em treino, validação e teste sem sobreposição de amostras."""
     if train_pct < 0 or val_pct < 0 or test_pct < 0:
         raise DatasetError("Os percentuais de divisão não podem ser negativos.")
     if abs((train_pct + val_pct + test_pct) - 100.0) > 1e-6:
@@ -119,7 +129,7 @@ def split(
 
     n_train = round(n_total * (train_pct / 100.0))
     n_val = round(n_total * (val_pct / 100.0))
-    # O restante vai para teste, garantindo que nenhuma amostra seja perdida por arredondamento
+    # O restante é atribuído ao conjunto de teste para evitar perda de amostras por arredondamento
     train_idx = indices[:n_train]
     val_idx = indices[n_train : n_train + n_val]
     test_idx = indices[n_train + n_val :]

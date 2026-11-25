@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-from backend.dataset import Dataset, check_compatibility, load_csv, read_columns, split
+from backend.data.dataset import Dataset, check_compatibility, load_csv, read_columns, split
 from backend.errors import DatasetError
-from backend.network import NeuralNetwork
+from backend.neural_network.network import NeuralNetwork
 
 
 def test_read_columns(csv_regressao):

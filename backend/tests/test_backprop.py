@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
-from backend.losses import mse
-from backend.network import NeuralNetwork
+from backend.neural_network.losses import mse
+from backend.neural_network.network import NeuralNetwork
 from backend.tests.helpers import numeric_gradients, params_iguais, snapshot_params
 
 

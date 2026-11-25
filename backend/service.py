@@ -1,22 +1,29 @@
+"""
+Fachada de serviços (Facade) que desacopla o núcleo matemático da interface gráfica (Flet).
+
+Orquestra o ciclo de vida completo da aplicação: configuração de topologia, carga e
+divisão de dados, normalização, treinamento assíncrono, avaliação, inferência e persistência.
+"""
+
 from dataclasses import asdict
 from pathlib import Path
 import threading
 from typing import Callable
 import numpy as np
-from backend.activations import list_activations
+from backend.neural_network.activations import list_activations
 from backend.classification import LabelEncoder, accuracy, confusion_matrix
-from backend.dataset import Dataset, DataSplit, check_compatibility, load_csv, read_columns, split
+from backend.data.dataset import Dataset, DataSplit, check_compatibility, load_csv, read_columns, split
 from backend.errors import ConfigError, DatasetError, StateError
-from backend.losses import mse
-from backend.network import NeuralNetwork
-from backend.normalization import Normalizer, apply_normalization
+from backend.neural_network.losses import mse
+from backend.neural_network.network import NeuralNetwork
+from backend.data.normalization import Normalizer, apply_normalization
 from backend.persistence import LoadedModel, load_model, save_model
 from backend.predictor import predict
 from backend.trainer import EpochResult, Trainer
 
 
 class MLPService:
-    """Fachada única consumida pela UI (Flet). Retorna apenas tipos nativos serializáveis."""
+    """Fachada única consumida pela UI. Expõe apenas tipos nativos Python serializáveis."""
 
     def __init__(self):
         self.network: NeuralNetwork | None = None
@@ -47,12 +54,12 @@ class MLPService:
         seed: int | None = None,
         task: str = "regression",
     ) -> dict:
+        """Instancia uma nova rede MLP e reinicia o estado de dados e treinamento."""
         if task not in ("regression", "classification"):
             raise ConfigError(f"Tipo de tarefa inválido: '{task}'.")
 
         self.network = NeuralNetwork.from_config(n_inputs, layers, seed=seed)
         self.task = task
-        # Reinicia estado de dados/treino ao criar uma nova arquitetura
         self.raw_dataset = None
         self.split_raw = None
         self.split = None
@@ -65,13 +72,15 @@ class MLPService:
         return self.describe_network()
 
     def describe_network(self) -> dict:
+        """Retorna um resumo estrutural da topologia atual e contagem de parâmetros treináveis."""
         if self.network is None:
             raise StateError("Nenhuma rede neural foi criada ou carregada.")
 
         layers_info = []
         total_params = 0
         for idx, layer in enumerate(self.network.layers):
-            params = layer.n_neurons * (layer.n_inputs + 1)  # pesos + 1 viés por neurônio
+            # Cada neurônio possui n_inputs pesos sinápticos + 1 viés (bias)
+            params = layer.n_neurons * (layer.n_inputs + 1)
             total_params += params
             layers_info.append({
                 "index": idx,
@@ -106,6 +115,7 @@ class MLPService:
         input_cols: list[str],
         output_cols: list[str],
     ) -> dict:
+        """Carrega o CSV, codifica rótulos (se classificação) e valida compatibilidade com a rede."""
         if self.network is None:
             raise StateError("Crie ou carregue uma rede neural antes de carregar o dataset.")
 
@@ -161,11 +171,11 @@ class MLPService:
         test_pct: float,
         seed: int | None = None,
     ) -> dict:
+        """Divide o dataset em treino, validação e teste, reaplicando a normalização se configurada."""
         if self.raw_dataset is None:
             raise StateError("Carregue um dataset antes de realizar a divisão.")
 
         self.split_raw = split(self.raw_dataset, train_pct, val_pct, test_pct, seed=seed)
-        # Reaplica normalização caso já estivesse configurada (entradas e saídas)
         self.split, self.normalizer, self.y_normalizer = apply_normalization(
             self.split_raw,
             self.norm_kind,
@@ -179,10 +189,11 @@ class MLPService:
         }
 
     def set_normalization(self, kind: str | None) -> dict:
+        """Configura o método de normalização a partir dos dados brutos particionados."""
         if self.split_raw is None:
             raise StateError("Divida o dataset antes de configurar a normalização.")
 
-        # Aplica sempre a partir de split_raw para evitar normalizar dados já normalizados
+        # Parte sempre de split_raw para evitar dupla normalização ao alternar métodos na UI
         self.split, self.normalizer, self.y_normalizer = apply_normalization(
             self.split_raw,
             kind,
@@ -201,6 +212,7 @@ class MLPService:
         on_epoch: Callable[[dict], None] | None = None,
         on_finish: Callable[[], None] | None = None,
     ) -> None:
+        """Inicia o treinamento SGD em thread dedicada para manter a responsividade da UI."""
         if self.network is None:
             raise StateError("Nenhuma rede neural configurada para treinar.")
         if self.split is None:
@@ -245,6 +257,7 @@ class MLPService:
     # ---------- Avaliação e Previsão ----------
 
     def evaluate(self, subset: str = "test") -> dict:
+        """Avalia o desempenho da rede no subconjunto escolhido usando métricas da escala original."""
         if self.network is None:
             raise StateError("Nenhuma rede neural disponível para avaliação.")
         if self.split is None:
@@ -260,7 +273,7 @@ class MLPService:
 
         preds = np.array([self.network.forward(x) for x in target_ds.X], dtype=float)
 
-        # Desnormaliza para que todas as métricas e valores exibidos na interface fiquem na escala original
+        # Reverte a normalização das saídas para que MSE, R², y_true e y_pred reflitam a escala real
         if self.y_normalizer is not None:
             y_true_display = self.y_normalizer.inverse_transform(target_ds.Y)
             preds_display = self.y_normalizer.inverse_transform(preds)
@@ -305,6 +318,7 @@ class MLPService:
         return result
 
     def predict(self, values: list[float]) -> dict:
+        """Executa inferência para uma amostra individual informada pelo usuário."""
         if self.network is None:
             raise StateError("Crie ou carregue uma rede neural antes de realizar previsões.")
 
@@ -332,6 +346,7 @@ class MLPService:
         )
 
     def load(self, path: str | Path) -> dict:
+        """Carrega um modelo salvo e restaura o estado interno do serviço e do codificador de classes."""
         loaded = load_model(path)
         self.network = loaded.network
         self.normalizer = loaded.normalizer

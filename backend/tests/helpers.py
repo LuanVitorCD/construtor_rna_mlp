@@ -1,6 +1,6 @@
 from typing import Callable
 import numpy as np
-from backend.network import NeuralNetwork
+from backend.neural_network.network import NeuralNetwork
 
 
 def snapshot_params(network: NeuralNetwork) -> list[list[tuple[np.ndarray, float]]]:

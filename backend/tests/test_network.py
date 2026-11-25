@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-from backend.activations import get_activation
+from backend.neural_network.activations import get_activation
 from backend.errors import ConfigError, DatasetError
-from backend.network import NeuralNetwork
+from backend.neural_network.network import NeuralNetwork
 from backend.tests.helpers import params_iguais, snapshot_params
 
 
