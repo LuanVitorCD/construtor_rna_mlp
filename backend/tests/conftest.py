@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 import numpy as np
 import pytest
-from backend.network import NeuralNetwork
+from backend.neural_network.network import NeuralNetwork
 
 SEED = 42
 

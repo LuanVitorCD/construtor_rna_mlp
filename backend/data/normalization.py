@@ -1,5 +1,5 @@
 import numpy as np
-from backend.dataset import Dataset, DataSplit
+from backend.data.dataset import Dataset, DataSplit
 from backend.errors import ConfigError
 
 

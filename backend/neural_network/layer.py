@@ -1,9 +1,9 @@
 import numpy as np
 from numpy.random import Generator
-from backend.activations import get_activation
+from backend.neural_network.activations import get_activation
 from backend.errors import ConfigError
-from backend.initializers import init_layer_params
-from backend.neuron import Neuron
+from backend.neural_network.initializers import init_layer_params
+from backend.neural_network.neuron import Neuron
 
 
 class Layer:

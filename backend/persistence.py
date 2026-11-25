@@ -2,8 +2,8 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 from backend.errors import ConfigError, PersistenceError
-from backend.network import NeuralNetwork
-from backend.normalization import Normalizer
+from backend.neural_network.network import NeuralNetwork
+from backend.data.normalization import Normalizer
 
 FORMAT_VERSION = 1
 

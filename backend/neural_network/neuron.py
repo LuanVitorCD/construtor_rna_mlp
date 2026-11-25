@@ -1,5 +1,5 @@
 import numpy as np
-from backend.activations import Activation
+from backend.neural_network.activations import Activation
 
 
 class Neuron:

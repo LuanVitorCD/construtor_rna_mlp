@@ -1,5 +1,5 @@
 import pytest
-from backend.activations import get_activation, list_activations
+from backend.neural_network.activations import get_activation, list_activations
 from backend.errors import ConfigError
 
 

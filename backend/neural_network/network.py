@@ -1,6 +1,6 @@
 import numpy as np
 from backend.errors import ConfigError, DatasetError
-from backend.layer import Layer
+from backend.neural_network.layer import Layer
 
 
 class NeuralNetwork:

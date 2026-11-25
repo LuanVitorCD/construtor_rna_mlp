@@ -1,5 +1,5 @@
 import numpy as np
-from backend.network import NeuralNetwork
+from backend.neural_network.network import NeuralNetwork
 
 
 def mse(Y_true: np.ndarray, Y_pred: np.ndarray) -> float:

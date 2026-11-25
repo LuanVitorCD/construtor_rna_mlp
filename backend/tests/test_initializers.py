@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
-from backend.initializers import init_layer_params
-from backend.network import NeuralNetwork
+from backend.neural_network.initializers import init_layer_params
+from backend.neural_network.network import NeuralNetwork
 from backend.tests.helpers import params_iguais, snapshot_params
 
 

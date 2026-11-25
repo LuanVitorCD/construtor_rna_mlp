@@ -3,13 +3,13 @@ from pathlib import Path
 import threading
 from typing import Callable
 import numpy as np
-from backend.activations import list_activations
+from backend.neural_network.activations import list_activations
 from backend.classification import LabelEncoder, accuracy, confusion_matrix
-from backend.dataset import Dataset, DataSplit, check_compatibility, load_csv, read_columns, split
+from backend.data.dataset import Dataset, DataSplit, check_compatibility, load_csv, read_columns, split
 from backend.errors import ConfigError, DatasetError, StateError
-from backend.losses import mse
-from backend.network import NeuralNetwork
-from backend.normalization import Normalizer, apply_normalization
+from backend.neural_network.losses import mse
+from backend.neural_network.network import NeuralNetwork
+from backend.data.normalization import Normalizer, apply_normalization
 from backend.persistence import LoadedModel, load_model, save_model
 from backend.predictor import predict
 from backend.trainer import EpochResult, Trainer

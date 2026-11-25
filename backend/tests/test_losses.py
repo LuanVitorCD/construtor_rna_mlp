@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
-from backend.dataset import load_csv, split
-from backend.losses import evaluate_mse, mse
-from backend.network import NeuralNetwork
+from backend.data.dataset import load_csv, split
+from backend.neural_network.losses import evaluate_mse, mse
+from backend.neural_network.network import NeuralNetwork
 from backend.tests.helpers import params_iguais, snapshot_params
 
 

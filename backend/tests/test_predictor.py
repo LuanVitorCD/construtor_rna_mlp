@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
-from backend.dataset import Dataset, DataSplit
+from backend.data.dataset import Dataset, DataSplit
 from backend.errors import DatasetError
-from backend.network import NeuralNetwork
-from backend.normalization import apply_normalization
+from backend.neural_network.network import NeuralNetwork
+from backend.data.normalization import apply_normalization
 from backend.persistence import LoadedModel, load_model, save_model
 from backend.predictor import predict
 from backend.tests.helpers import params_iguais, snapshot_params

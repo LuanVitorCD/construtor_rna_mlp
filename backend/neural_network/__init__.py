@@ -1,0 +1,1 @@
+"""Implementação dos componentes fundamentais de uma rede neural MLP."""

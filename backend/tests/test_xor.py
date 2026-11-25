@@ -1,5 +1,5 @@
 import pytest
-from backend.losses import evaluate_mse
+from backend.neural_network.losses import evaluate_mse
 from backend.tests.helpers import numeric_gradients
 
 SAIDAS_SLIDE = {

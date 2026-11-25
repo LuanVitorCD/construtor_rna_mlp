@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
 from backend.errors import DatasetError
-from backend.network import NeuralNetwork
+from backend.neural_network.network import NeuralNetwork
 
 
 @dataclass

@@ -2,11 +2,11 @@ from dataclasses import dataclass
 import threading
 from typing import Callable
 import numpy as np
-from backend.dataset import Dataset
+from backend.data.dataset import Dataset
 from backend.errors import ConfigError, DatasetError
-from backend.losses import mse
-from backend.network import NeuralNetwork
-from backend.normalization import Normalizer
+from backend.neural_network.losses import mse
+from backend.neural_network.network import NeuralNetwork
+from backend.data.normalization import Normalizer
 
 
 @dataclass

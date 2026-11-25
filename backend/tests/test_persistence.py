@@ -1,10 +1,10 @@
 import json
 import numpy as np
 import pytest
-from backend.dataset import Dataset, DataSplit
+from backend.data.dataset import Dataset, DataSplit
 from backend.errors import PersistenceError
-from backend.network import NeuralNetwork
-from backend.normalization import apply_normalization
+from backend.neural_network.network import NeuralNetwork
+from backend.data.normalization import apply_normalization
 from backend.persistence import load_model, save_model
 from backend.tests.helpers import params_iguais, snapshot_params
 
