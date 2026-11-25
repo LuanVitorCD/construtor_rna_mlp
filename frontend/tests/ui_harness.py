@@ -16,10 +16,14 @@ from frontend.views.training import TrainingView
 
 
 class FakePage:
-    """Substitui ``ft.Page``: as telas só usam update/run_task/diálogos."""
+    """Substitui ``ft.Page``: as telas só usam update/run_task/diálogos/overlay/dimensões."""
 
-    def __init__(self):
+    def __init__(self, width: int = 1280, height: int = 800):
         self.tasks = []
+        self.overlay = []
+        self.controls = []
+        self.width = width
+        self.height = height
 
     def update(self, *controls):
         pass

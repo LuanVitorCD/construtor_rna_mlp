@@ -102,14 +102,12 @@ def test_menu_e_botoes_por_modo():
 def test_aviso_nao_impede_a_tela_de_atualizar(csv_regressao):
     """Bug: "Sugerir neurônios" mudava o valor, mas a tela só mostrava depois de outra ação.
 
-    O aviso (SnackBar) usa show_dialog(), que só atualiza a camada de diálogos; com isso o
-    Flet pula a atualização automática do fim do evento. O toast precisa terminar com um
-    page.update() da página inteira.
+    O toast atualiza o card flutuante no overlay e precisa terminar com um page.update()
+    da página inteira.
     """
     async def flow():
         page = FakePage()
         events = []
-        page.show_dialog = lambda dialog: events.append("dialog")
         page.update = lambda *controls: events.append("update")
         ctx = AppContext(page=page, gateway=ServiceGateway(DemoService(), DemoBackendError, demo=True),
                          state=AppState(), file_picker=None)
@@ -120,6 +118,7 @@ def test_aviso_nao_impede_a_tela_de_atualizar(csv_regressao):
         events.clear()
         arch._on_suggest(None)
         assert [r.neurons.value for r in arch.hidden_rows] == ["7"]
-        assert events == ["dialog", "update"]
+        assert shell._toast_box.visible
+        assert events == ["update"]
 
     asyncio.run(flow())

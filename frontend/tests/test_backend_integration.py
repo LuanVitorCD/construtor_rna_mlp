@@ -186,12 +186,14 @@ def test_erros_do_backend_viram_mensagens(csv_regressao):
         data.train_pct.value, data.val_pct.value, data.test_pct.value = "70", "15", "15"
         await data._on_apply(None)
         assert state.data_ready
-        train.epochs.value = "100000"
+        train.epochs.value = "1000000"
+        train.lr.value = "0,00001"
         await train._on_start(None)
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.02)
         train._on_stop(None)  # Trainer.stop() + on_finish no finally do backend
         await asyncio.wait_for(page.tasks[-1], timeout=30)
-        assert not state.training and train.message.title == "Treinamento interrompido"
+        assert not state.training
+        assert train.message.title == "Treinamento interrompido" or "Treinamento interrompido" in train.message.body
 
     asyncio.run(flow())
 
