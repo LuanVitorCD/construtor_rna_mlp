@@ -116,12 +116,12 @@ construtor_rna_mlp/
 As telas (`frontend/views/`) nunca acessam o backend diretamente. Toda solicitação passa pelo `ServiceGateway`, que despacha a chamada em uma *thread* auxiliar (`asyncio.to_thread`) para o `MLPService` e devolve tipos nativos do Python (`dict`, `list`, `float`, `str`) ou exceções traduzidas em mensagens amigáveis.
 
 ```mermaid
-flowchart LR
-    U[Usuario] -->|interage| V[Telas - frontend/views]
-    V -->|solicita operacao| G[ServiceGateway - service_gateway.py]
-    G -->|executa em thread auxiliar| S[MLPService - backend/service.py]
-    S -->|retorna dict ou list| G
-    G -->|atualiza estado ou exibe erro| V
+flowchart TB
+    U["Usuário"] -->|"interage"| V["Telas<br/>(frontend/views)"]
+    V -->|"solicita operação"| G["ServiceGateway<br/>(service_gateway.py)"]
+    G -->|"atualiza estado ou exibe erro"| V
+    G -->|"executa em thread auxiliar"| S["MLPService<br/>(backend/service.py)"]
+    S -->|"retorna dict ou list"| G
 ```
 
 ### 🧩 Arquitetura modular do backend
@@ -156,7 +156,7 @@ O backend foi organizado em quatro camadas de responsabilidade desacopladas, tod
 1. **MLP implementada do zero com NumPy:** toda a estrutura matemática (neurônio, camada, propagação direta, *backpropagation* e SGD) foi codificada sem frameworks de ML, mantendo correspondência direta com as equações teóricas da disciplina.
 2. **Fachada única (`MLPService`):** isola completamente a lógica numérica da interface gráfica, retornando apenas estruturas nativas serializáveis e facilitando testes automatizados sem dependência de janela.
 3. **SGD on-line (atualização exemplo a exemplo):** a cada época, os padrões de treinamento são embaralhados e os pesos são ajustados imediatamente após cada amostra com base no Erro Quadrático Médio (MSE).
-4. **Inicialização adequada à ativação e reprodutibilidade:** camadas com `relu` utilizam inicialização He Normal ($\mathcal{N}(0, \sqrt{2/n_{\text{in}}})$); camadas com `linear`, `sigmoid` ou `tanh` utilizam Xavier/Glorot Uniforme ($\mathcal{U}[-\sqrt{6/(n_{\text{in}}+n_{\text{out}})}, +\sqrt{6/(n_{\text{in}}+n_{\text{out}})}]$). Todos os vieses iniciam em zero e um único gerador (`np.random.default_rng`) garante determinismo quando uma semente é informada.
+4. **Inicialização adequada à ativação e reprodutibilidade:** camadas com `relu` utilizam inicialização He Normal ($\mathcal{N}(0, \sqrt{2/n_{in}})$); camadas com `linear`, `sigmoid` ou `tanh` utilizam Xavier/Glorot Uniforme ($\mathcal{U}[-\sqrt{6/(n_{in}+n_{out})}, +\sqrt{6/(n_{in}+n_{out})}]$). Todos os vieses iniciam em zero e um único gerador (`np.random.default_rng`) garante determinismo quando uma semente é informada.
 5. **Prevenção de vazamento de dados (*data leakage*) e normalização das saídas:** os parâmetros de Min-Max e Z-Score são extraídos **exclusivamente** do subconjunto de treinamento e reaplicados na validação e no teste. Em regressão, as saídas também são normalizadas para evitar saturação em funções limitadas (`sigmoid`/`tanh`), sendo revertidas à escala física original antes do cálculo das métricas exibidas ao usuário.
 6. **Execução assíncrona na interface:** o treinamento roda em *thread* dedicada com controle cooperativo de parada (`threading.Event`), mantendo a interface responsiva enquanto atualiza o gráfico de perda ao vivo.
 7. **Particionamento disjunto sem perda de amostras:** o arredondamento percentual na divisão treino/validação/teste destina o excedente ao conjunto de teste e impede que qualquer subconjunto fique vazio.
@@ -211,19 +211,19 @@ svc.save("modelo.json")
 
 ### 🧠 Formulação Matemática e Backpropagation (`backend/neural_network/network.py`)
 
-No código, utiliza-se $N$ para o total de amostras de um subconjunto e $N_{\text{out}}$ para o número de neurônios da camada de saída.
+No código, utiliza-se $N$ para o total de amostras de um subconjunto e $N_{out}$ para o número de neurônios da camada de saída.
 
-- **Erro Quadrático Médio (MSE) global (`losses.py`):** avaliado sobre $N$ amostras e $N_{\text{out}}$ saídas:
+- **Erro Quadrático Médio (MSE) global (`losses.py`):** avaliado sobre $N$ amostras e $N_{out}$ saídas:
 
-$$\text{MSE} = \frac{1}{N \cdot N_{\text{out}}} \sum_{n=1}^{N} \sum_{k=1}^{N_{\text{out}}} \left(y_{n,k} - \hat{y}_{n,k}\right)^2$$
+$$\text{MSE} = \frac{1}{N \cdot N_{out}} \sum_{n=1}^{N} \sum_{k=1}^{N_{out}} \left(y_{n,k} - \hat{y}_{n,k}\right)^2$$
 
-- **Retropropagação do erro por padrão (`network.backward`):** para cada amostra $(\mathbf{x}, \mathbf{y})$ apresentada no SGD, com perda quadrática $E = \frac{1}{N_{\text{out}}}\sum_{k=1}^{N_{\text{out}}}(y_k - \hat{y}_k)^2$:
+- **Retropropagação do erro por padrão (`network.backward`):** para cada amostra $(\mathbf{x}, \mathbf{y})$ apresentada no SGD, com perda quadrática $E = \frac{1}{N_{out}}\sum_{k=1}^{N_{out}}(y_k - \hat{y}_k)^2$:
 
-$$\begin{aligned}
-\text{Camada de saída } (L): \quad & \delta_k^{(L)} = \frac{2}{N_{\text{out}}} \left(\hat{y}_k - y_k\right) f'\!\left(z_k^{(L)}\right) \\[6pt]
-\text{Camadas ocultas } (l): \quad & \delta_j^{(l)} = \left(\sum_{k} w_{kj}^{(l+1)} \, \delta_k^{(l+1)}\right) f'\!\left(z_j^{(l)}\right) \quad \text{(usando os pesos antes da atualização)} \\[6pt]
-\text{Atualização SGD:} \quad & w_{ji} \leftarrow w_{ji} - \eta \, \delta_j \, x_i, \qquad b_j \leftarrow b_j - \eta \, \delta_j
-\end{aligned}$$
+$$\text{Camada de saída } (L): \quad \delta_k^{(L)} = \frac{2}{N_{out}} \left(\hat{y}_k - y_k\right) f'\!\left(z_k^{(L)}\right)$$
+
+$$\text{Camadas ocultas } (l): \quad \delta_j^{(l)} = \left(\sum_{k} w_{kj}^{(l+1)} \, \delta_k^{(l+1)}\right) f'\!\left(z_j^{(l)}\right) \quad \text{(usando os pesos antes da atualização)}$$
+
+$$\text{Atualização SGD:} \quad w_{ji} \leftarrow w_{ji} - \eta \, \delta_j \, x_i, \qquad b_j \leftarrow b_j - \eta \, \delta_j$$
 
 ### 🏋️ Treinamento e Avaliação (`backend/trainer.py` e `backend/service.py`)
 
