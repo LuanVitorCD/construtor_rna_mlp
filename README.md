@@ -60,7 +60,7 @@ Da biblioteca padrão do Python são utilizados `csv`, `json`, `threading`, `asy
 
 ## 📁 Estrutura do Projeto
 
-A organização abaixo reflete fielmente a árvore de diretórios do repositório:
+A organização abaixo reflete a árvore de diretórios do repositório:
 
 ```text
 construtor_rna_mlp/
@@ -117,21 +117,37 @@ As telas (`frontend/views/`) nunca acessam o backend diretamente. Toda solicita�
 
 ```mermaid
 flowchart LR
-    U(["👤 Usuário"]) -->|"interage"| V["<b>Telas</b><br/>frontend/views/"]
-    V -->|"solicita operação"| G["<b>ServiceGateway</b><br/>frontend/service_gateway.py"]
-    G -->|"executa em thread auxiliar"| S["<b>MLPService</b><br/>backend/service.py"]
-    S -->|"retorna dict / list"| G
-    G -->|"atualiza estado ou exibe erro"| V
+    U[Usuario] -->|interage| V[Telas - frontend/views]
+    V -->|solicita operacao| G[ServiceGateway - service_gateway.py]
+    G -->|executa em thread auxiliar| S[MLPService - backend/service.py]
+    S -->|retorna dict ou list| G
+    G -->|atualiza estado ou exibe erro| V
 ```
 
 ### 🧩 Arquitetura modular do backend
 
-O backend foi estruturado em camadas de responsabilidade bem definidas, orquestradas exclusivamente pelo `MLPService` (`backend/service.py`):
+O backend foi organizado em quatro camadas de responsabilidade desacopladas, todas coordenadas exclusivamente pela fachada `MLPService` (`backend/service.py`):
 
-- **Núcleo da Rede (`backend/neural_network/`):** `Neuron` encapsula o vetor de pesos sinápticos, viés, potencial de ativação ($z = \mathbf{w}^T\mathbf{x} + b$), saída ativada ($a = f(z)$) e gradiente local ($\delta$). `Layer` agrupa neurônios que compartilham o mesmo vetor de entrada e função de ativação (`activations.py`), inicializados via He ou Xavier/Glorot (`initializers.py`). `NeuralNetwork` encadeia as camadas, executa a propagação direta (`forward`), calcula a retropropagação do erro (`backward`) e atualiza os parâmetros por SGD, utilizando o Erro Quadrático Médio (`losses.py`).
-- **Pipeline de Dados (`backend/data/`):** `dataset.py` realiza a leitura de cabeçalhos e colunas do CSV, valida compatibilidade dimensional com a rede e executa o particionamento aleatório sem sobreposição em treino, validação e teste. `normalization.py` implementa o `Normalizer` (Min-Max e Z-Score), ajustando os parâmetros estatísticos apenas sobre o conjunto de treino para evitar vazamento de dados (*data leakage*) e provendo a reversão de escala (`inverse_transform`).
-- **Treinamento e Inferência:** `trainer.py` gerencia o laço de épocas do SGD com embaralhamento das amostras a cada época, cálculo do MSE na escala original e parada segura via `threading.Event`. `predictor.py` executa a inferência de novos padrões (normalização da entrada $\rightarrow$ *forward* $\rightarrow$ desnormalização da saída).
-- **Classificação, Persistência e Erros:** `classification.py` converte rótulos categóricos em codificação binária ou *one-hot* (`LabelEncoder`) e calcula acurácia e matriz de confusão. `persistence.py` serializa e valida modelos completos em JSON versionado, enquanto `errors.py` define a hierarquia `BackendError` para tratamento claro de falhas na interface.
+1. **Núcleo da Rede Neural (`backend/neural_network/`):**
+   - `neuron.py` (`Neuron`): representa a unidade computacional elementar, armazenando seu vetor de pesos sinápticos $\mathbf{w}$, viés $b$, potencial de ativação ($z = \mathbf{w}^T\mathbf{x} + b$), saída ativada ($a = f(z)$) e gradiente local ($\delta = \partial E / \partial z$).
+   - `activations.py` (`Activation`): registra as funções diferenciáveis (`linear`, `sigmoid`, `tanh` e `relu`) junto de suas derivadas analíticas $f'(z)$ otimizadas em termos da própria saída $a$, incluindo proteção numérica contra *overflow* na exponencial da sigmoide.
+   - `initializers.py`: define as estratégias de inicialização de pesos **He Normal** (para `relu`) e **Xavier/Glorot Uniforme** (para as demais ativações), mantendo todos os vieses iniciados em zero.
+   - `layer.py` (`Layer`): agrupa um conjunto de neurônios densamente conectados ao mesmo vetor de entrada e função de ativação, retendo o vetor de entrada do último passo (`last_inputs`) para o cálculo dos gradientes na retropropagação.
+   - `network.py` (`NeuralNetwork`): encadeia dinamicamente as camadas, executa a propagação direta (`forward`), calcula os gradientes locais pela regra da cadeia (`backward`) e atualiza pesos e vieses via SGD.
+   - `losses.py`: implementa a função de custo Erro Quadrático Médio (`mse` e `evaluate_mse`).
+
+2. **Pipeline de Dados e Pré-processamento (`backend/data/`):**
+   - `dataset.py`: lê cabeçalhos (`read_columns`) e carrega matrizes de atributos $\mathbf{X}$ e alvos $\mathbf{Y}$ a partir de arquivos CSV (`load_csv`), valida compatibilidade dimensional com a topologia da rede (`check_compatibility`) e realiza o particionamento aleatório sem sobreposição em subconjuntos de treinamento, validação e teste (`split`).
+   - `normalization.py` (`Normalizer` e `apply_normalization`): aplica escalonamento **Min-Max** ou padronização **Z-Score** ajustando os parâmetros estatísticos **exclusivamente** sobre o conjunto de treinamento para impedir vazamento de dados (*data leakage*), além de prover `inverse_transform` para devolver saídas e métricas à escala física original.
+
+3. **Motor de Treinamento e Inferência:**
+   - `trainer.py` (`Trainer`): gerencia o loop de treinamento por épocas do SGD, embaralhando os índices das amostras de treino a cada época, computando o MSE de treino e validação já na escala original, notificando a interface via callback `on_epoch` e suportando interrupção cooperativa segura via `threading.Event`.
+   - `predictor.py` (`predict`): encapsula o fluxo completo de inferência para novos padrões individuais — valida a finitude numérica das entradas, aplica o normalizador de entrada, executa `network.forward`, desnormaliza a saída e decodifica o rótulo textual quando a tarefa é classificação.
+
+4. **Classificação, Persistência e Tratamento de Erros:**
+   - `classification.py` (`LabelEncoder`, `accuracy`, `confusion_matrix`): converte rótulos textuais em codificação binária ($0/1$) ou *one-hot* (para 3 ou mais classes), realiza a decodificação inversa (limiar $0{,}5$ ou `argmax`) e calcula acurácia e matriz de confusão.
+   - `persistence.py` (`save_model`, `load_model`): serializa a arquitetura completa, pesos, vieses, parâmetros dos normalizadores e metadados das colunas em JSON versionado, validando estrutura, dimensões e finitude numérica ao carregar.
+   - `errors.py`: define a hierarquia `BackendError` (`ConfigError`, `DatasetError`, `StateError`, `PersistenceError`), convertendo falhas de regra de negócio em mensagens diagnósticas claras para o usuário.
 
 ---
 
@@ -193,19 +209,26 @@ print(svc.predict([250, 60])) # {"outputs": [...]}
 svc.save("modelo.json")
 ```
 
-### 🧠 Equações do Backpropagation (`backend/neural_network/network.py`)
+### 🧠 Formulação Matemática e Backpropagation (`backend/neural_network/network.py`)
 
-Para cada padrão $(\mathbf{x}, \mathbf{y})$ apresentado à rede com $K$ neurônios na camada de saída e erro quadrático $E = \frac{1}{K}\sum_{k=1}^{K}(y_k - \hat{y}_k)^2$:
+No código, utiliza-se $N$ para o total de amostras de um subconjunto e $N_{\text{out}}$ para o número de neurônios da camada de saída.
 
-```text
-Camada de saída (L):   δₖ⁽ᴸ⁾ = (2/K) · (ŷₖ − yₖ) · f'(zₖ⁽ᴸ⁾)
-Camadas ocultas (l):   δⱼ⁽ˡ⁾ = (Σₖ wₖⱼ⁽ˡ⁺¹⁾ · δₖ⁽ˡ⁺¹⁾) · f'(zⱼ⁽ˡ⁾)   (usando pesos antes do ajuste)
-Atualização SGD:       wⱼᵢ ← wⱼᵢ − η · δⱼ · xᵢ      e      bⱼ ← bⱼ − η · δⱼ
-```
+- **Erro Quadrático Médio (MSE) global (`losses.py`):** avaliado sobre $N$ amostras e $N_{\text{out}}$ saídas:
 
-### 🏋️ Treinamento (`backend/trainer.py`)
+$$\text{MSE} = \frac{1}{N \cdot N_{\text{out}}} \sum_{n=1}^{N} \sum_{k=1}^{N_{\text{out}}} \left(y_{n,k} - \hat{y}_{n,k}\right)^2$$
 
-A cada época, o `Trainer` embaralha os índices do conjunto de treinamento usando `np.random.default_rng(shuffle_seed)`, executa `forward` e `backward` para cada amostra individualmente e, ao final da época, calcula o MSE nos conjuntos de treinamento e validação (já revertidos à escala original quando há normalização de saída). O progresso é enviado à interface por meio do callback `on_epoch(EpochResult)` e o laço verifica continuamente o `threading.Event` para interromper o treino de forma segura quando solicitado.
+- **Retropropagação do erro por padrão (`network.backward`):** para cada amostra $(\mathbf{x}, \mathbf{y})$ apresentada no SGD, com perda quadrática $E = \frac{1}{N_{\text{out}}}\sum_{k=1}^{N_{\text{out}}}(y_k - \hat{y}_k)^2$:
+
+$$\begin{aligned}
+\text{Camada de saída } (L): \quad & \delta_k^{(L)} = \frac{2}{N_{\text{out}}} \left(\hat{y}_k - y_k\right) f'\!\left(z_k^{(L)}\right) \\[6pt]
+\text{Camadas ocultas } (l): \quad & \delta_j^{(l)} = \left(\sum_{k} w_{kj}^{(l+1)} \, \delta_k^{(l+1)}\right) f'\!\left(z_j^{(l)}\right) \quad \text{(usando os pesos antes da atualização)} \\[6pt]
+\text{Atualização SGD:} \quad & w_{ji} \leftarrow w_{ji} - \eta \, \delta_j \, x_i, \qquad b_j \leftarrow b_j - \eta \, \delta_j
+\end{aligned}$$
+
+### 🏋️ Treinamento e Avaliação (`backend/trainer.py` e `backend/service.py`)
+
+- **Loop de treinamento (`Trainer.run`):** a cada época, os índices do conjunto de treinamento são embaralhados com `np.random.default_rng(shuffle_seed)`. Para cada amostra, executa-se `forward` e `backward` sequencialmente. Ao final da época, calcula-se o MSE nos subconjuntos de treinamento e validação (revertendo a normalização de saída via `y_normalizer.inverse_transform`, quando ativa) e emite-se um `EpochResult` pelo callback `on_epoch`. A interrupção cooperativa verifica continuamente um `threading.Event`.
+- **Avaliação (`MLPService.evaluate`):** executa inferência no subconjunto selecionado (`train`, `val` ou `test`), reverte a escala das saídas para o domínio físico original e calcula **MSE** e coeficiente de determinação **$R^2$** na regressão, ou **MSE**, **acurácia** e **matriz de confusão** na classificação.
 
 ### 💾 Persistência (`backend/persistence.py`)
 
@@ -232,24 +255,28 @@ Os modelos são salvos em JSON legível contendo versão de esquema, tarefa, dim
 
 ### 📋 Pré-requisitos
 
-- **Python 3.10 ou superior** (com `pip` habilitado no PATH).
-- **Conexão com a internet** para instalar os pacotes e baixar o cliente desktop do Flet na primeira execução.
+- **Python 3.10 ou superior** instalado (no Windows, marque *Add python.exe to PATH* durante a instalação).
+- **Conexão com a internet** na primeira execução para instalar as dependências e baixar o cliente desktop do Flet.
 
-### 1️⃣ Clonar o repositório e configurar o ambiente
+### 1️⃣ Baixar o projeto e preparar o ambiente virtual
+
+Abra um terminal na pasta desejada e execute:
 
 ```bash
 git clone https://github.com/LuanVitorCD/construtor_rna_mlp.git
 cd construtor_rna_mlp
 ```
 
-Crie e ative um ambiente virtual na raiz do projeto:
+*(Caso tenha baixado o arquivo `.zip`, extraia-o e abra o terminal dentro da pasta `construtor_rna_mlp`.)*
+
+Crie e ative o ambiente virtual isolado:
 
 - **Windows (PowerShell):**
   ```powershell
   python -m venv .venv
   .venv\Scripts\Activate.ps1
   ```
-- **Windows (CMD):**
+- **Windows (Prompt de Comando / CMD):**
   ```bat
   python -m venv .venv
   .venv\Scripts\activate.bat
@@ -260,37 +287,38 @@ Crie e ative um ambiente virtual na raiz do projeto:
   source .venv/bin/activate
   ```
 
-### 2️⃣ Instalar dependências e iniciar a aplicação
+*(Quando ativo, o prefixo `(.venv)` aparecerá no início da linha do terminal.)*
+
+### 2️⃣ Instalar dependências e abrir a aplicação
+
+Com o ambiente virtual ativo, instale os pacotes e execute a interface:
 
 ```bash
 pip install -r requirements.txt
 python -m frontend
 ```
 
-*(Alternativamente, é possível iniciar com `python frontend/main.py` ou `flet run frontend/main.py`.)*
+A janela principal será aberta no menu inicial. *(Alternativamente, também é possível iniciar via `python frontend/main.py` ou `flet run frontend/main.py`.)*
 
-### 3️⃣ Fluxo rápido de uso
+### 3️⃣ Roteiro rápido para testar a aplicação
 
-1. Prepare um arquivo **CSV** com cabeçalho, separado por vírgula e ponto como separador decimal (ex.: `area_m2,quartos,preco_mil`).
-2. Abra a aplicação e clique em **Criar novo modelo**.
-3. Na aba **Dados**, selecione o CSV, defina entradas/saídas, percentuais de divisão e normalização (**Z-Score** ou **Min-Max**).
-4. Na aba **Arquitetura**, configure as camadas ocultas (ou utilize a sugestão $2n + 1$) e clique em **Criar rede**.
-5. Na aba **Treinamento**, informe épocas e taxa de aprendizagem ($\eta$) e clique em **Iniciar treinamento**.
-6. Analise os resultados na aba **Avaliação**, realize predições na aba **Previsão** e salve o modelo (`Ctrl+S`).
+1. **Datasets e modelos prontos:** a pasta `assets/` já contém datasets CSV e modelos JSON pré-treinados para testes imediatos, ou você pode usar qualquer CSV próprio com cabeçalho e ponto como separador decimal.
+2. **Criar um modelo do zero:** clique em **Criar novo modelo**, carregue um CSV na aba **Dados** (recomendado ativar normalização **Z-Score** ou **Min-Max**), configure as camadas na aba **Arquitetura** e clique em **Criar rede**.
+3. **Treinar e avaliar:** na aba **Treinamento**, defina épocas e taxa de aprendizagem ($\eta$) e clique em **Iniciar treinamento**. Em seguida, confira as métricas na aba **Avaliação**, teste novos valores na aba **Previsão** e salve o modelo com `Ctrl+S`.
 
-### 🎭 Modo demonstração e testes
+### 🎭 Modo demonstração e suíte de testes
 
-- **Modo demonstração (UI com dados simulados):**
+- **Modo demonstração (executa a UI com dados simulados):**
   - PowerShell: `$env:MLP_FRONTEND_DEMO = "1"; python -m frontend`
   - Linux / macOS: `MLP_FRONTEND_DEMO=1 python -m frontend`
-- **Executar suíte de testes automatizados:**
+- **Executar testes automatizados (sem abrir janela):**
   ```bash
-  python -m pytest                # todos os testes
-  python -m pytest -m "not slow"  # apenas testes rápidos
+  python -m pytest                # executa toda a suíte
+  python -m pytest -m "not slow"  # ignora testes demorados de convergência
   ```
 
 ### 🩹 Solução rápida de problemas
 
-- **Erro de política de execução no PowerShell:** execute `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` uma única vez ou utilize o Prompt de Comando (`cmd`).
-- **`ModuleNotFoundError: No module named 'flet'`:** certifique-se de que o ambiente virtual `(.venv)` está ativado antes de rodar `pip install -r requirements.txt`.
-- **`No module named frontend`:** execute os comandos sempre a partir da pasta raiz (`construtor_rna_mlp/`).
+- **Erro de execução de scripts no PowerShell:** execute `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` uma única vez ou utilize o Prompt de Comando (`cmd`).
+- **`ModuleNotFoundError: No module named 'flet'`:** confirme que o ambiente virtual `(.venv)` está ativo antes de rodar `pip install -r requirements.txt`.
+- **`No module named frontend`:** certifique-se de que o terminal está posicionado na pasta raiz do projeto (`construtor_rna_mlp/`).
