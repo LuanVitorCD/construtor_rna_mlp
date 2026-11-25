@@ -1,3 +1,10 @@
+"""
+Estratégias de inicialização de pesos sinápticos e vieses para camadas densas.
+
+Implementa as inicializações de He (Kaiming) e Xavier (Glorot) para estabilizar
+a variância das ativações e gradientes entre camadas sucessivas.
+"""
+
 import numpy as np
 from numpy.random import Generator
 
@@ -8,15 +15,16 @@ def init_layer_params(
     activation_name: str,
     rng: Generator,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Inicializa pesos com He (ReLU) ou Xavier/Glorot (demais ativações) e vieses em zero."""
+    """Inicializa matriz de pesos com He (ReLU) ou Xavier/Glorot (demais) e vieses nulos."""
     if activation_name == "relu":
-        # He Normal: desvio padrão sqrt(2 / n_in) preserva variância em camadas ReLU
+        # Inicialização He Normal: N(0, sqrt(2 / n_in)) compensa a nulidade de metade dos sinais na ReLU
         std = float(np.sqrt(2.0 / n_in))
         weights = rng.normal(0.0, std, size=(n_out, n_in))
     else:
-        # Xavier/Glorot Uniforme: intervalo [-sqrt(6 / (n_in + n_out)), +sqrt(6 / (n_in + n_out))]
+        # Inicialização Xavier/Glorot Uniforme: U[-sqrt(6 / (n_in + n_out)), +sqrt(6 / (n_in + n_out))]
         limit = float(np.sqrt(6.0 / (n_in + n_out)))
         weights = rng.uniform(-limit, limit, size=(n_out, n_in))
 
+    # Vieses inicializados em zero para quebra de simetria guiada pelos pesos aleatórios
     biases = np.zeros(n_out, dtype=float)
     return weights, biases
