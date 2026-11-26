@@ -213,9 +213,9 @@ svc.save("modelo.json")
 
 No código, utiliza-se $N$ para o total de amostras de um subconjunto e $N_{out}$ para o número de neurônios da camada de saída.
 
-- **Erro Quadrático Médio (MSE) global (`losses.py`):** avaliado sobre $N$ amostras e $N_{out}$ saídas:
+- **Erro Quadrático Médio (MSE) global (`losses.py`):** avaliado de forma generalizada sobre $N$ amostras e $N_{out}$ saídas (reduzindo-se à expressão clássica de saída única quando $N_{out} = 1$):
 
-$$\text{MSE} = \frac{1}{N \cdot N_{out}} \sum_{n=1}^{N} \sum_{k=1}^{N_{out}} \left(y_{n,k} - \hat{y}_{n,k}\right)^2$$
+$$\text{MSE} = \frac{1}{N \cdot N_{out}} \sum_{n=1}^{N} \sum_{k=1}^{N_{out}} \left(y_{n,k} - \hat{y}_{n,k}\right)^2 \qquad \xrightarrow{N_{out} = 1} \qquad \text{MSE} = \frac{1}{N} \sum_{n=1}^{N} \left(y_n - \hat{y}_n\right)^2$$
 
 - **Retropropagação do erro por padrão (`network.backward`):** para cada amostra $(\mathbf{x}, \mathbf{y})$ apresentada no SGD, com perda quadrática $E = \frac{1}{N_{out}}\sum_{k=1}^{N_{out}}(y_k - \hat{y}_k)^2$:
 
