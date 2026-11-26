@@ -1,0 +1,1 @@
+"""Testes automatizados dos componentes do Backend."""

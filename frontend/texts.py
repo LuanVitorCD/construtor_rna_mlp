@@ -1,0 +1,174 @@
+"""Textos da interface (pt-BR).
+
+Terminologia e orientações seguem o material da disciplina:
+- slides "Aula 12 - Neurônio, Perceptron, Adaline" e "Aula 14 - RNA Multi-Layer";
+- Ivan Nunes da Silva et al., *Redes Neurais Artificiais para Engenharia e Ciências Aplicadas*;
+- Simon Haykin, *Redes Neurais: Princípios e Prática*;
+- Goodfellow, Bengio e Courville, *Deep Learning*.
+"""
+
+APP_TITLE = "Construtor de Redes Neurais MLP"
+APP_SUBTITLE = (
+    "Sistema configurável para construir, treinar, armazenar e utilizar Redes Neurais "
+    "Artificiais (RNAs) do tipo Multilayer Perceptron (MLP)"
+)
+
+TASK_LABELS = {
+    "regression": "Regressão",
+    "classification": "Classificação",
+}
+
+ACTIVATION_LABELS = {
+    "linear": "Linear (identidade)",
+    "sigmoid": "Sigmoid (logística)",
+    "tanh": "Tangente hiperbólica (tanh)",
+    "relu": "ReLU",
+}
+
+ACTIVATION_RANGES = {
+    "linear": "saída em (−∞, +∞)",
+    "sigmoid": "saída em (0, 1)",
+    "tanh": "saída em (−1, 1)",
+    "relu": "saída em [0, +∞)",
+}
+
+NORMALIZATION_LABELS = {
+    None: "Nenhuma",
+    "minmax": "Min-Max: escala cada entrada para [0, 1]",
+    "zscore": "Z-score: média 0 e desvio-padrão 1",
+}
+
+NORMALIZATION_SHORT = {None: "nenhuma", "minmax": "Min-Max", "zscore": "Z-score"}
+
+SUBSET_LABELS = {"train": "Treinamento", "val": "Validação", "test": "Teste"}
+
+
+def activation_label(name: str) -> str:
+    return ACTIVATION_LABELS.get(name, name)
+
+
+HELP = {
+    "task": (
+        "Regressão estima valores contínuos (ex.: preço, temperatura). "
+        "Classificação (extra) atribui uma classe: a saída é codificada como 0/1 (binária) "
+        "ou one-hot (uma saída por classe) e treinada com o mesmo MSE."
+    ),
+    "inputs": "Quantidade de atributos de entrada. Deve ser igual ao nº de colunas de entrada do CSV.",
+    "io_auto": (
+        "Automático: o nº de entradas é o nº de colunas de entrada marcadas na aba Dados; o de "
+        "saídas é o nº de colunas de saída (regressão) ou vem das classes do rótulo "
+        "(binária: 1 neurônio; multiclasse: 1 por classe)."
+    ),
+    "io_custom": (
+        "Personalizado: você digita os números. Se forem diferentes do que o CSV pede, a rede é "
+        "criada, mas os dados não poderão ser usados para treiná-la."
+    ),
+    "apply_data": (
+        "Os dados são carregados, divididos e normalizados quando você cria a rede (aba "
+        "Arquitetura). Se mudar algo aqui depois, clique em “Aplicar dados à rede”."
+    ),
+    "template": (
+        "Usar um modelo como base preenche o formulário com a configuração dele (tarefa, camadas, "
+        "ativações, colunas e normalização). Os pesos não são reaproveitados: a nova rede começa "
+        "com pesos aleatórios ao clicar em “Criar rede”."
+    ),
+    "hidden": (
+        "Uma camada oculta costuma bastar. Para o nº de neurônios, é sugerido "
+        "2n + 1, com n = nº de entradas. Se duas redes generalizam igual, "
+        "prefira a menor. Tanh é a escolha usual nas camadas ocultas."
+    ),
+    "output_regression": (
+        "Na regressão, use Linear (identidade) na saída. Sigmoid limita a saída a (0, 1), "
+        "Tanh a (−1, 1) e ReLU não produz negativos."
+    ),
+    "output_classification": (
+        "Binária: 1 neurônio Sigmoid (classe 1 se saída ≥ 0,5). "
+        "Multiclasse: 1 neurônio por classe (one-hot); vence a maior saída."
+    ),
+    "seed": "Fixa os números aleatórios para reproduzir o resultado. Deixe em branco para sortear.",
+    "init": "Pesos iniciais: Xavier/Glorot para Linear, Sigmoid e Tanh; He para ReLU. Vieses começam em 0.",
+    "csv": "Os dados devem vir limpos. Escolha quais colunas são entradas e quais são saídas esperadas.",
+    "split": (
+        "Treinamento ajusta os pesos. Validação mede a generalização a cada época, sem alterar "
+        "os pesos. Teste fica reservado para a avaliação final."
+    ),
+    "normalization": (
+        "Os parâmetros (mínimo/máximo ou média/desvio) vêm só do subconjunto de treinamento "
+        "e são aplicados aos três subconjuntos. As saídas esperadas não são normalizadas. "
+        "Entradas em escalas muito diferentes atrapalham o gradiente."
+    ),
+    "epochs": "Época: uma apresentação completa do subconjunto de treinamento. No SGD, os pesos mudam após cada amostra.",
+    "lr": (
+        "Taxa de aprendizagem (η): tamanho do passo da descida do gradiente. Valores altos "
+        "fazem o erro oscilar ou divergir; valores baixos deixam o treino lento. "
+        "É sugerido 0,05 ≤ η ≤ 0,75. Sem normalização, valores menores (0,001–0,01) são mais seguros."
+    ),
+    "shuffle_seed": "Semente da ordem em que as amostras são apresentadas a cada época (opcional).",
+    "retrain": (
+        "Treinar de novo continua a partir dos pesos atuais. "
+        "Para recomeçar com pesos aleatórios, recrie a rede na aba Arquitetura."
+    ),
+    "curve": (
+        "Se o MSE de validação sobe enquanto o de treinamento continua caindo, a rede está "
+        "memorizando o ruído (sobreajuste). O ponto de menor MSE de validação é o ponto de "
+        "parada antecipada."
+    ),
+    "mse": (
+        "MSE = (1/N) · Σ (y − ŷ)²: a média dos erros ao quadrado entre a saída esperada (y) e a "
+        "saída prevista pela rede (ŷ). Quanto menor, melhor."
+    ),
+    "r2": (
+        "R² (coeficiente de determinação, só na regressão) = 1 − MSE / variância de y: a fração da "
+        "variação da saída explicada pela rede. 1 = previsão perfeita; 0 = tão bom quanto prever "
+        "sempre a média; negativo = pior que a média. Por não depender da escala da saída, ajuda a "
+        "comparar resultados de datasets diferentes."
+    ),
+    "test": (
+        "Use o conjunto de teste só na avaliação final, depois de escolher arquitetura e "
+        "hiperparâmetros. O erro de validação tende a subestimar o erro real."
+    ),
+    "extrapolation": (
+        "Uma MLP costuma errar fora da faixa de valores vista no treinamento. "
+        "Prefira entradas dentro do domínio dos dados de treino."
+    ),
+    "predict": "A previsão só faz a propagação direta: os pesos e vieses não mudam.",
+    "predict_csv": (
+        "Cada linha do arquivo vira uma previsão. Só as colunas marcadas como “Entrada” vão para a rede. "
+        "Se o arquivo já tiver a resposta certa, marque essa coluna como “Saída (oculta)”: ela fica "
+        "escondida durante a previsão e, se você quiser, aparece depois ao lado do previsto para comparar. "
+        "Não é preciso apagar a coluna numa planilha."
+    ),
+    "compare_csv": (
+        "A comparação usa a coluna oculta como resposta esperada. É como um conjunto de teste extra: "
+        "se as linhas foram usadas no treinamento, o erro tende a parecer menor do que é de verdade."
+    ),
+    "persistence": (
+        "O arquivo JSON guarda entradas, camadas, ativações, pesos, vieses e a normalização "
+        "(função e parâmetros) para reconstruir a rede com as mesmas saídas."
+    ),
+}
+
+MODE_LABELS = {
+    "create": "Criar novo modelo",
+    "use": "Usar modelo existente",
+}
+
+MODE_DESCRIPTIONS = {
+    "create": (
+        "Escolha um CSV, monte a arquitetura, treine, avalie e salve a rede. "
+        "Também dá para partir da configuração de um modelo salvo."
+    ),
+    "use": "Abra um modelo salvo (JSON) para ver as informações dele e fazer previsões.",
+}
+
+SHORTCUTS = [
+    ("Ctrl + 1 … 5", "Ir para cada aba do modo atual (na ordem do menu lateral)"),
+    ("Ctrl + N", "Menu inicial: começar “Criar novo modelo”"),
+    ("Ctrl + O", "Abrir modelo salvo (no modo Criar: usar como base)"),
+    ("Ctrl + S", "Salvar modelo (JSON), no modo Criar"),
+    ("Ctrl + R", "Reiniciar tudo (modo Criar), com confirmação"),
+    ("Ctrl + M", "Voltar ao menu de escolha de modo"),
+    ("Ctrl + T", "Alternar tema claro/escuro"),
+    ("Tab / Shift + Tab", "Navegar entre os campos"),
+    ("Enter", "Confirmar a ação principal do campo"),
+]
